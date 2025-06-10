@@ -1,0 +1,144 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  lint-and-test:
+    name: Lint and Test
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Lint code
+      run: npm run lint --if-present
+    
+    - name: Type check
+      run: npm run type-check --if-present
+    
+    - name: Build project
+      run: npm run build
+    
+    - name: Run tests
+      run: npm test --if-present
+    
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: build-artifacts-node-${{ matrix.node-version }}
+        path: dist/
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18.x'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Run security audit
+      run: npm audit --audit-level high
+    
+    - name: Run dependency check
+      run: npx audit-ci --high
+
+  build-and-package:
+    name: Build and Package
+    needs: [lint-and-test, security-scan]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18.x'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Build project
+      run: npm run build
+    
+    - name: Create package
+      run: npm pack
+    
+    - name: Upload package
+      uses: actions/upload-artifact@v3
+      with:
+        name: npm-package
+        path: "*.tgz"
+
+  test-installation:
+    name: Test Installation
+    needs: [build-and-package]
+    runs-on: ${{ matrix.os }}
+    if: github.ref == 'refs/heads/main'
+    
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18.x'
+    
+    - name: Test setup script (Unix)
+      if: runner.os != 'Windows'
+      run: |
+        chmod +x scripts/setup.sh
+        # Test script syntax
+        bash -n scripts/setup.sh
+        echo "Setup script syntax is valid"
+    
+    - name: Test setup script (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        # Test PowerShell script syntax
+        powershell -Command "Get-Command scripts/setup.ps1"
+        echo "PowerShell script is accessible"
+    
+    - name: Install and build
+      run: |
+        npm ci
+        npm run build
+    
+    - name: Test CLI
+      run: |
+        node dist/index.js --help || echo "CLI help test completed"

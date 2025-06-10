@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "ndb": {
+      "command": "node",
+      "args": ["/absolute/path/to/ndb-mcp-server/dist/index.js"],
+      "env": {
+        "NDB_BASE_URL": "https://your-ndb-server.domain.com",
+        "NDB_USERNAME": "your-ndb-username",
+        "NDB_PASSWORD": "your-ndb-password",
+        "NDB_TIMEOUT": "30000",
+        "NDB_VERIFY_SSL": "true"
+      }
+    }
+  }
+}
