@@ -33,25 +33,19 @@ The automated setup script handles all installation steps for you.
 **For Unix/Linux/macOS:**
 ```bash
 # Download and run setup script
-curl -fsSL https://raw.githubusercontent.com/your-username/ndb-mcp-server/main/scripts/setup.sh | bash
+curl -fsSL https://raw.githubusercontent.com/rouxton/ndb-mcp-server/main/scripts/scripts_setup_unix.sh | bash
 
 # Or clone and run locally
-git clone https://github.com/your-username/ndb-mcp-server.git
+git clone https://github.com/rouxton/ndb-mcp-server.git
 cd ndb-mcp-server
-chmod +x scripts/setup.sh
-./scripts/setup.sh
+chmod +x scripts/scripts_setup_unix.sh
+./scripts/scripts_setup_unix.sh
 ```
 
 **For Windows PowerShell:**
 ```powershell
-# Download and run setup script
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/your-username/ndb-mcp-server/main/scripts/setup.ps1" -OutFile "setup.ps1"
-PowerShell -ExecutionPolicy Bypass -File setup.ps1
-
-# Or clone and run locally
-git clone https://github.com/your-username/ndb-mcp-server.git
-cd ndb-mcp-server
-powershell -ExecutionPolicy Bypass -File scripts/setup.ps1
+# Windows setup script coming soon
+# For now, use manual installation method below
 ```
 
 ### Method 2: Manual Installation
@@ -71,7 +65,7 @@ sudo apt-get install -y nodejs
 
 **Step 2: Clone Repository**
 ```bash
-git clone https://github.com/your-username/ndb-mcp-server.git
+git clone https://github.com/rouxton/ndb-mcp-server.git
 cd ndb-mcp-server
 ```
 
@@ -80,84 +74,25 @@ cd ndb-mcp-server
 npm install
 ```
 
-**Step 4: Configure Environment**
-```bash
-cp .env.example .env
-# Edit .env with your NDB configuration
-```
-
-**Step 5: Build Project**
+**Step 4: Build Project**
 ```bash
 npm run build
 ```
 
-**Step 6: Test Installation**
-```bash
-npm start
-```
+## Configuration Methods
 
-## Configuration
+There are two main ways to configure the NDB MCP Server, depending on your use case:
 
-### Environment Variables
+### Method 1: Claude Desktop Configuration (Recommended for Normal Use)
 
-Create a `.env` file in the project root with your NDB configuration:
-
-```bash
-# Required Configuration
-NDB_BASE_URL=https://your-ndb-server.domain.com
-NDB_USERNAME=your-ndb-username
-NDB_PASSWORD=your-secure-password
-
-# Optional Configuration
-NDB_TIMEOUT=30000
-NDB_VERIFY_SSL=true
-```
-
-### Configuration Options
-
-| Variable | Required | Description | Default | Example |
-|----------|----------|-------------|---------|---------|
-| `NDB_BASE_URL` | ✅ Yes | Base URL of your NDB server | - | `https://ndb.company.com` |
-| `NDB_USERNAME` | ✅ Yes | NDB username | - | `admin` or `automation-user` |
-| `NDB_PASSWORD` | ✅ Yes | NDB password | - | `SecurePass123!` |
-| `NDB_TIMEOUT` | ❌ No | Request timeout (ms) | `30000` | `60000` |
-| `NDB_VERIFY_SSL` | ❌ No | Verify SSL certificates | `true` | `false` for dev |
-
-### Environment-Specific Configurations
-
-**Development Environment:**
-```bash
-NDB_BASE_URL=https://ndb-dev.company.local
-NDB_USERNAME=dev-admin
-NDB_PASSWORD=dev-password
-NDB_VERIFY_SSL=false
-NDB_TIMEOUT=60000
-```
-
-**Production Environment:**
-```bash
-NDB_BASE_URL=https://ndb-prod.company.com
-NDB_USERNAME=automation-service
-NDB_PASSWORD=highly-secure-production-password
-NDB_VERIFY_SSL=true
-NDB_TIMEOUT=30000
-```
-
-## Claude Desktop Integration
-
-### Configuration File Setup
-
-Claude Desktop requires a configuration file to recognize MCP servers.
+This is the recommended approach for regular usage with Claude Desktop. Configuration is done directly in Claude Desktop's configuration file.
 
 **Configuration File Locations:**
 - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
 - **Linux**: `~/.config/Claude/claude_desktop_config.json`
 
-### Basic Configuration
-
-Create or edit the Claude Desktop configuration file:
-
+**Basic Configuration:**
 ```json
 {
   "mcpServers": {
@@ -175,9 +110,9 @@ Create or edit the Claude Desktop configuration file:
 }
 ```
 
-### Platform-Specific Examples
+**Platform-Specific Examples:**
 
-**macOS Configuration:**
+*macOS Configuration:*
 ```json
 {
   "mcpServers": {
@@ -195,7 +130,7 @@ Create or edit the Claude Desktop configuration file:
 }
 ```
 
-**Windows Configuration:**
+*Windows Configuration:*
 ```json
 {
   "mcpServers": {
@@ -213,44 +148,85 @@ Create or edit the Claude Desktop configuration file:
 }
 ```
 
-### Advanced Configuration
+### Method 2: Local .env File (For Development and Testing)
 
-**With Custom Node.js Path:**
-```json
-{
-  "mcpServers": {
-    "ndb": {
-      "command": "/usr/local/bin/node",
-      "args": ["/opt/ndb-mcp-server/dist/index.js"],
-      "env": {
-        "NDB_BASE_URL": "https://ndb.company.com",
-        "NDB_USERNAME": "service-account",
-        "NDB_PASSWORD": "service-password",
-        "NDB_TIMEOUT": "45000",
-        "NDB_VERIFY_SSL": "true"
-      }
-    }
-  }
-}
+This method is primarily for development, testing, and debugging. Create a `.env` file in the project root:
+
+```bash
+# Copy the example file
+cp .env.example .env
 ```
 
-## Verification
+**Edit `.env` with your configuration:**
+```bash
+# Required Configuration
+NDB_BASE_URL=https://ndb-dev.company.local
+NDB_USERNAME=dev-admin
+NDB_PASSWORD=dev-password
+
+# Optional Configuration
+NDB_TIMEOUT=30000
+NDB_VERIFY_SSL=false
+```
+
+**When to use .env file:**
+- 🛠️ **Development and debugging**
+- 🧪 **Running connection tests** (`npm run test:connection`)
+- 🔧 **Manual server startup** (`npm start`)
+- 🔄 **Frequent configuration changes**
+
+**When to use Claude Desktop configuration:**
+- 🎯 **Normal usage with Claude Desktop**
+- 🏢 **Production environments**
+- 🔒 **Enhanced security** (no local .env file)
+- 👥 **Multi-user machines**
+
+## Configuration Options
+
+| Variable | Required | Description | Default | Example |
+|----------|----------|-------------|---------|---------|
+| `NDB_BASE_URL` | ✅ Yes | Base URL of your NDB server | - | `https://ndb.company.com` |
+| `NDB_USERNAME` | ✅ Yes | NDB username | - | `admin` or `automation-user` |
+| `NDB_PASSWORD` | ✅ Yes | NDB password | - | `SecurePass123!` |
+| `NDB_TIMEOUT` | ❌ No | Request timeout (ms) | `30000` | `60000` |
+| `NDB_VERIFY_SSL` | ❌ No | Verify SSL certificates | `true` | `false` for dev |
+
+## Testing Your Installation
 
 ### Test NDB Connection
 
+After installation, test your connection to NDB:
+
 ```bash
-# Test connection using built-in script
+# Using npm script (recommended)
+npm run test:connection
+
+# Or run directly
 node scripts/test-connection.js
-
-# Or test manually
-npm start
 ```
 
-**Expected Output:**
+**Expected Output for Successful Connection:**
 ```
-✅ NDB MCP Server initialized successfully
-✅ Token authentication successful
-🚀 NDB MCP Server running on stdio
+=== Configuration Validation ===
+✅ NDB_BASE_URL configured: https://ndb.company.com
+✅ NDB_USERNAME configured: admin
+✅ NDB_PASSWORD configured (hidden for security)
+✅ Valid URL format: https://ndb.company.com
+
+=== Network Connectivity ===
+✅ Server is reachable (HTTP 401)
+✅ NDB API endpoint detected (authentication required)
+
+=== Authentication Test ===
+✅ Authentication successful
+✅ Valid NDB API response received
+
+=== API Functionality Test ===
+✅ Databases API endpoint working
+✅ Profiles API endpoint working
+✅ SLAs API endpoint working
+
+🎉 All critical tests passed! NDB MCP Server should work correctly.
 ```
 
 ### Test Claude Desktop Integration
@@ -314,14 +290,15 @@ npm install
 npm run build
 ```
 
-**Connection Issues:**
-```bash
-# Test basic connectivity
-curl -k https://your-ndb-server.com/era/v0.9/clusters
+**Connection Test Failures:**
 
-# Test with credentials
-curl -u "username:password" -k https://your-ndb-server.com/era/v0.9/clusters
-```
+If the connection test fails, check the error messages:
+
+- **DNS resolution failed**: Verify the NDB_BASE_URL is correct
+- **Connection refused**: Check if NDB server is running and accessible
+- **SSL certificate errors**: Set `NDB_VERIFY_SSL=false` for development
+- **Authentication failed**: Verify username and password
+- **Access forbidden**: Check user permissions in NDB
 
 ### Environment-Specific Troubleshooting
 
@@ -332,8 +309,8 @@ curl -u "username:password" -k https://your-ndb-server.com/era/v0.9/clusters
 
 **Self-Signed Certificates:**
 ```bash
-# Disable SSL verification for development
-export NDB_VERIFY_SSL=false
+# For development environments
+NDB_VERIFY_SSL=false
 ```
 
 **Windows PowerShell Execution Policy:**
@@ -345,20 +322,20 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 ## Security Considerations
 
 ### Credential Security
-- Never commit `.env` files to version control
-- Use environment-specific configurations
-- Rotate passwords regularly
-- Use service accounts with minimal required permissions
+- **Never commit `.env` files** to version control
+- **Use environment-specific configurations**
+- **Rotate passwords regularly**
+- **Use service accounts** with minimal required permissions
 
 ### Network Security
-- Always use HTTPS in production
-- Verify SSL certificates when possible
-- Consider VPN requirements for remote access
-- Monitor access logs for unusual activity
+- **Always use HTTPS** in production
+- **Verify SSL certificates** when possible
+- **Consider VPN requirements** for remote access
+- **Monitor access logs** for unusual activity
 
 ### File Permissions
 ```bash
-# Secure .env file
+# Secure .env file (if used)
 chmod 600 .env
 
 # Secure configuration directory
@@ -369,19 +346,20 @@ chmod 700 ~/.config/Claude
 
 After successful installation:
 
-1. **Read the [Configuration Guide](configuration.md)** for advanced setup
-2. **Review [Usage Examples](usage-examples.md)** to get started
-3. **Check [Security Guide](security.md)** for production deployment
+1. **Read the [Configuration Guide](configuration.md)** for advanced setup options
+2. **Review [Usage Examples](usage-examples.md)** to learn common workflows
+3. **Check [Security Guide](security.md)** for production deployment best practices
 4. **Bookmark [Troubleshooting Guide](troubleshooting.md)** for future reference
 
 ## Getting Help
 
 If you encounter issues during installation:
 
-1. **Check the [Troubleshooting Guide](troubleshooting.md)**
-2. **Review logs for error messages**
-3. **Test each component individually**
-4. **Open an issue on GitHub** with detailed information
+1. **Run the connection test** to diagnose problems
+2. **Check the [Troubleshooting Guide](troubleshooting.md)**
+3. **Review logs for error messages**
+4. **Test each component individually**
+5. **Open an issue on GitHub** with detailed information
 
 ## Uninstallation
 
@@ -395,4 +373,10 @@ rm -rf /path/to/ndb-mcp-server
 # Edit and remove "ndb" section from claude_desktop_config.json
 
 # Restart Claude Desktop
+```
+
+**For .env file cleanup:**
+```bash
+# Remove any .env files created
+rm .env
 ```
