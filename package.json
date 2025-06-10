@@ -1,0 +1,36 @@
+{
+  "name": "ndb-mcp-server",
+  "version": "1.0.0",
+  "description": "Model Context Protocol server for Nutanix Database Service (NDB)",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "mcp",
+    "nutanix",
+    "database",
+    "ndb",
+    "server"
+  ],
+  "author": "rouxton",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.4.0",
+    "axios": "^1.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "bin": {
+    "ndb-mcp-server": "dist/index.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
