@@ -85,7 +85,7 @@ npm run test:inspector
 npm run test:all
 ```
 
-For comprehensive testing documentation, see **[Testing Guide](docs/TESTING.md)**.
+For comprehensive testing documentation, see **[Testing Guide](docs/testing.md)**.
 
 ## 🎯 Features
 
@@ -139,7 +139,7 @@ Once configured, interact with your NDB environment using natural language:
 - 📖 **[Installation Guide](docs/installation.md)** - Detailed setup instructions
 - ⚙️ **[Configuration Guide](docs/configuration.md)** - Environment and security setup
 - 💡 **[Usage Examples](docs/usage-examples.md)** - Comprehensive usage scenarios
-- 🔧 **[Testing Guide](docs/TESTING.md)** - Complete testing documentation
+- 🧪 **[Testing Guide](docs/testing.md)** - Complete testing documentation
 - 🔧 **[Troubleshooting](docs/troubleshooting.md)** - Common issues and solutions
 - 🔒 **[Security Guide](docs/security.md)** - Security best practices
 - 📝 **[API Reference](docs/api-reference.md)** - Complete tool documentation
