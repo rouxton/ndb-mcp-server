@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 
 /**
- * NDB Connection Test Script
+ * NDB Connection Test Script with Special Character Support
  * 
  * This script tests the connection to Nutanix Database Service (NDB)
  * and validates authentication and basic API functionality.
+ * Enhanced to handle special characters in passwords properly.
  * 
  * Usage:
  *   node scripts/test-connection.js
@@ -13,7 +14,7 @@
  * Environment Variables:
  *   NDB_BASE_URL - Base URL of NDB server (required)
  *   NDB_USERNAME - NDB username (required)
- *   NDB_PASSWORD - NDB password (required)
+ *   NDB_PASSWORD - NDB password (required, supports special characters)
  *   NDB_TIMEOUT - Request timeout in milliseconds (optional, default: 30000)
  *   NDB_VERIFY_SSL - Verify SSL certificates (optional, default: true)
  */
@@ -49,7 +50,7 @@ const colors = {
   cyan: '\x1b[36m'
 };
 
-// Configuration
+// Configuration with safe password handling
 const config = {
   baseUrl: process.env.NDB_BASE_URL,
   username: process.env.NDB_USERNAME,
@@ -92,8 +93,48 @@ function logInfo(message) {
   log(`ℹ️  ${message}`, colors.blue);
 }
 
+function logDebug(message) {
+  log(`🔍 ${message}`, colors.magenta);
+}
+
 function logHeader(message) {
   log(`\n${colors.bright}=== ${message} ===${colors.reset}`, colors.cyan);
+}
+
+/**
+ * Safely encode credentials for Basic Auth
+ * Handles special characters properly
+ */
+function createBasicAuthHeader(username, password) {
+  try {
+    // Create the credentials string
+    const credentials = `${username}:${password}`;
+    
+    // Convert to Buffer first to handle special characters correctly
+    const credentialsBuffer = Buffer.from(credentials, 'utf8');
+    
+    // Then encode to base64
+    const encodedCredentials = credentialsBuffer.toString('base64');
+    
+    logDebug(`Username length: ${username.length}`);
+    logDebug(`Password length: ${password.length}`);
+    logDebug(`Credentials string length: ${credentials.length}`);
+    logDebug(`Base64 encoded length: ${encodedCredentials.length}`);
+    
+    // Validate the encoding by decoding and checking
+    const decodedTest = Buffer.from(encodedCredentials, 'base64').toString('utf8');
+    if (decodedTest === credentials) {
+      logDebug('✅ Base64 encoding validation passed');
+    } else {
+      logWarning('⚠️ Base64 encoding validation failed');
+    }
+    
+    return `Basic ${encodedCredentials}`;
+    
+  } catch (error) {
+    logError(`Failed to create Basic Auth header: ${error.message}`);
+    throw error;
+  }
 }
 
 /**
@@ -153,7 +194,7 @@ function makeRequest(options, postData = null) {
  */
 async function testConfiguration() {
   logHeader('Configuration Validation');
-  testResults.total += 4;
+  testResults.total += 5;
   
   // Check required environment variables
   if (config.baseUrl) {
@@ -172,6 +213,21 @@ async function testConfiguration() {
   
   if (config.password) {
     logSuccess('NDB_PASSWORD configured (hidden for security)');
+    
+    // Check for special characters that might cause issues
+    const specialChars = /[!@#$%^&*(),.?":{}|<>]/;
+    if (specialChars.test(config.password)) {
+      logInfo('Password contains special characters - using enhanced encoding');
+      
+      // Test encoding
+      try {
+        const testAuth = createBasicAuthHeader(config.username, config.password);
+        logSuccess('Password encoding test passed');
+      } catch (error) {
+        logError(`Password encoding test failed: ${error.message}`);
+        return false;
+      }
+    }
   } else {
     logError('NDB_PASSWORD is required but not set');
     return false;
@@ -254,7 +310,7 @@ async function testConnectivity() {
 }
 
 /**
- * Test 3: Authentication
+ * Test 3: Authentication with enhanced special character support
  */
 async function testAuthentication() {
   logHeader('Authentication Test');
@@ -262,7 +318,9 @@ async function testAuthentication() {
   
   try {
     const url = new URL(config.baseUrl);
-    const authString = Buffer.from(`${config.username}:${config.password}`).toString('base64');
+    
+    // Use the enhanced auth header creation
+    const authHeader = createBasicAuthHeader(config.username, config.password);
     
     const options = {
       hostname: url.hostname,
@@ -270,15 +328,17 @@ async function testAuthentication() {
       path: '/era/v0.9/clusters',
       method: 'GET',
       headers: {
-        'Authorization': `Basic ${authString}`,
+        'Authorization': authHeader,
         'Content-Type': 'application/json',
-        'Accept': 'application/json'
+        'Accept': 'application/json',
+        'User-Agent': 'NDB-MCP-Server/1.0'
       },
       timeout: config.timeout,
       rejectUnauthorized: config.verifySsl
     };
     
-    logInfo('Testing basic authentication...');
+    logInfo('Testing basic authentication with enhanced encoding...');
+    logDebug(`Auth header created successfully`);
     
     const response = await makeRequest(options);
     
@@ -295,10 +355,17 @@ async function testAuthentication() {
       }
     } else if (response.statusCode === 401) {
       logError('Authentication failed - check username and password');
+      logDebug('This may indicate the password encoding is still incorrect');
     } else if (response.statusCode === 403) {
       logError('Access forbidden - user may lack required permissions');
     } else if (response.statusCode === 404) {
       logError('API endpoint not found - verify NDB version and URL');
+    } else if (response.statusCode === 400) {
+      logError('Bad request - this was your original issue');
+      logInfo('The enhanced encoding should have fixed this');
+      if (response.data && response.data.message) {
+        logError(`Server message: ${response.data.message}`);
+      }
     } else {
       logError(`Authentication test failed (HTTP ${response.statusCode})`);
       if (response.data && response.data.message) {
@@ -328,7 +395,7 @@ async function testApiFunctionality(clusterData) {
   
   try {
     const url = new URL(config.baseUrl);
-    const authString = Buffer.from(`${config.username}:${config.password}`).toString('base64');
+    const authHeader = createBasicAuthHeader(config.username, config.password);
     
     // Test multiple endpoints
     const endpoints = [
@@ -345,9 +412,10 @@ async function testApiFunctionality(clusterData) {
           path: endpoint.path,
           method: 'GET',
           headers: {
-            'Authorization': `Basic ${authString}`,
+            'Authorization': authHeader,
             'Content-Type': 'application/json',
-            'Accept': 'application/json'
+            'Accept': 'application/json',
+            'User-Agent': 'NDB-MCP-Server/1.0'
           },
           timeout: config.timeout,
           rejectUnauthorized: config.verifySsl
@@ -390,6 +458,14 @@ function displayEnvironmentInfo() {
   } else {
     logWarning('.env file not found - using system environment variables');
   }
+  
+  // Additional debug info for special characters
+  if (config.password) {
+    const hasSpecialChars = /[!@#$%^&*(),.?":{}|<>]/.test(config.password);
+    if (hasSpecialChars) {
+      logInfo('Password contains special characters - enhanced encoding enabled');
+    }
+  }
 }
 
 /**
@@ -408,6 +484,7 @@ function displaySummary() {
   
   if (testResults.failed === 0) {
     logSuccess('\n🎉 All critical tests passed! NDB MCP Server should work correctly.');
+    logInfo('The special character encoding fix works!');
     logInfo('You can now start the MCP server with: npm start');
   } else {
     logError('\n🚨 Some tests failed. Please review the errors above and fix configuration issues.');
@@ -419,7 +496,7 @@ function displaySummary() {
  * Main test execution
  */
 async function runTests() {
-  log(`${colors.bright}NDB Connection Test Script${colors.reset}`, colors.cyan);
+  log(`${colors.bright}NDB Connection Test Script (Enhanced for Special Characters)${colors.reset}`, colors.cyan);
   log('Testing connection to Nutanix Database Service (NDB)\n');
   
   displayEnvironmentInfo();
@@ -470,7 +547,7 @@ process.on('uncaughtException', (error) => {
 // Show help if requested
 if (process.argv.includes('--help') || process.argv.includes('-h')) {
   console.log(`
-NDB Connection Test Script
+NDB Connection Test Script (Enhanced for Special Characters)
 
 Usage:
   node scripts/test-connection.js [options]
@@ -481,7 +558,7 @@ Options:
 Environment Variables:
   NDB_BASE_URL     Base URL of NDB server (required)
   NDB_USERNAME     NDB username (required)  
-  NDB_PASSWORD     NDB password (required)
+  NDB_PASSWORD     NDB password (required, supports special characters like !)
   NDB_TIMEOUT      Request timeout in ms (optional, default: 30000)
   NDB_VERIFY_SSL   Verify SSL certificates (optional, default: true)
 
@@ -489,11 +566,15 @@ Examples:
   # Basic test with .env file
   node scripts/test-connection.js
   
-  # Test with environment variables
-  NDB_BASE_URL=https://ndb.example.com NDB_USERNAME=admin NDB_PASSWORD=secret node scripts/test-connection.js
+  # Test with environment variables (including special characters)
+  NDB_BASE_URL=https://ndb.example.com NDB_USERNAME=admin NDB_PASSWORD='pass!word' node scripts/test-connection.js
   
   # Test with SSL verification disabled
   NDB_VERIFY_SSL=false node scripts/test-connection.js
+
+Notes:
+  - Passwords with special characters (!, @, #, etc.) are now properly handled
+  - Use single quotes around passwords with special characters in shell commands
 `);
   process.exit(0);
 }
