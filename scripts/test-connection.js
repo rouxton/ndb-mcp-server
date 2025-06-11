@@ -6,9 +6,14 @@
  * Based on diagnostic results showing working authentication
  */
 
-const https = require('https');
-const path = require('path');
-const fs = require('fs');
+import https from 'https';
+import { dirname, join } from 'path';
+import { readFileSync, existsSync } from 'fs';
+import { fileURLToPath } from 'url';
+
+// ES6 equivalent of __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 // ANSI color codes for output formatting
 const colors = {
@@ -26,11 +31,11 @@ const colors = {
  */
 function loadConfig() {
   // Try to load .env file
-  const envPath = path.join(process.cwd(), '.env');
+  const envPath = join(process.cwd(), '.env');
   
-  if (fs.existsSync(envPath)) {
+  if (existsSync(envPath)) {
     console.log(`${colors.blue}ℹ️  Loading configuration from .env file...${colors.reset}`);
-    const envContent = fs.readFileSync(envPath, 'utf8');
+    const envContent = readFileSync(envPath, 'utf8');
     
     envContent.split('\n').forEach(line => {
       const [key, ...valueParts] = line.split('=');
@@ -269,12 +274,14 @@ process.on('SIGTERM', () => {
   process.exit(0);
 });
 
-// Run the test
-if (require.main === module) {
+// Run the test (only if this is the main module)
+const isMainModule = process.argv[1] === fileURLToPath(import.meta.url);
+if (isMainModule) {
   main().catch(error => {
     console.error(`${colors.red}Unhandled error: ${error.message}${colors.reset}`);
     process.exit(1);
   });
 }
 
-module.exports = { loadConfig, createAuthHeader, makeRequest };
+// Export functions for potential use as module
+export { loadConfig, createAuthHeader, makeRequest };
