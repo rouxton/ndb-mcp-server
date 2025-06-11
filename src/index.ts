@@ -17,7 +17,7 @@ import {
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
 
-import { NDBClient, createNDBClient } from './ndb-client.js';
+import { NDBClient, createNDBClient } from './ndb_client.js';
 import { formatResponse, parseJsonArgument } from './utils.js';
 import { tools } from './tools.js';
 import type { ToolCallArgs } from './types.js';
@@ -27,11 +27,6 @@ const server = new Server(
   {
     name: 'ndb-mcp-server',
     version: '1.0.0',
-  },
-  {
-    capabilities: {
-      tools: {},
-    },
   }
 );
 
