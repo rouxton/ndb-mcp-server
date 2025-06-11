@@ -10,6 +10,7 @@
     "start": "node dist/index.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "test:connection": "node scripts/test-connection.js",
+    "test:connection:debug": "node scripts/test-connection-debug.js",
     "test:mcp": "python3 scripts/test-mcp-client.py",
     "test:inspector": "npx @modelcontextprotocol/inspector node dist/index.js",
     "test:all": "npm run test:connection && npm run test:mcp"
