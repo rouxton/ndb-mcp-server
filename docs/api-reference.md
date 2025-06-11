@@ -4,12 +4,13 @@ This document provides comprehensive reference for all NDB MCP Server tools and 
 
 ## Overview
 
-The NDB MCP Server provides 30+ tools organized into the following categories:
-- **Databases** (8 tools): Core database management operations
-- **Clones** (6 tools): Database cloning and refresh operations
-- **Time Machines** (7 tools): Backup and recovery management
+The NDB MCP Server provides 32 tools organized into the following categories:
+- **Databases** (6 tools): Core database management operations
+- **Database Servers** (3 tools): Database server management
+- **Clones** (5 tools): Database cloning and refresh operations
+- **Time Machines** (5 tools): Backup and recovery management
 - **Snapshots** (4 tools): Point-in-time snapshot operations
-- **Infrastructure** (5+ tools): Clusters, servers, profiles, and operations
+- **Infrastructure** (9 tools): Clusters, profiles, SLAs, operations, and alerts
 
 ## Authentication
 
@@ -19,20 +20,20 @@ All tools require authentication via environment variables:
 NDB_BASE_URL=https://your-ndb-server.com
 NDB_USERNAME=your-username
 NDB_PASSWORD=your-password
-NDB_TIMEOUT=30000         # Optional, default 30s
-NDB_VERIFY_SSL=true       # Optional, default true
+NDB_TIMEOUT=30000        # Optional, default 30s
+NDB_VERIFY_SSL=true      # Optional, default true
 ```
 
 ## Database Tools
 
-### `ndb-list-databases`
+### `list_databases`
 List all databases registered with NDB.
 
 **Parameters:**
-- `value_type` (optional): Filter type - `id`, `name`, `database-name`
-- `value` (optional): Filter value corresponding to value_type
+- `valueType` (optional): Filter type - `id`, `name`, `database-name`
+- `value` (optional): Filter value corresponding to valueType
 - `detailed` (optional): Load detailed information (boolean)
-- `load_cluster` (optional): Include cluster information (boolean)
+- `loadDbserverCluster` (optional): Include cluster information (boolean)
 
 **Example Usage:**
 ```
@@ -51,14 +52,14 @@ Get detailed info for database 'sales-prod'
 - `dateCreated`: Creation timestamp
 - `timeMachineId`: Associated time machine ID
 
-### `ndb-get-database`
+### `get_database`
 Get detailed information for a specific database.
 
 **Parameters:**
-- `database_id` (required): Database identifier
-- `value_type` (optional): Type of identifier - `id`, `name`, `database-name`
+- `databaseId` (required): Database identifier
+- `valueType` (optional): Type of identifier - `id`, `name`, `database-name`
 - `detailed` (optional): Load full details (boolean)
-- `load_cluster` (optional): Include cluster info (boolean)
+- `loadDbserverCluster` (optional): Include cluster info (boolean)
 
 **Example Usage:**
 ```
@@ -66,17 +67,18 @@ Show details for database sales-prod
 Get complete info for database ID abc123
 ```
 
-### `ndb-provision-database`
+### `provision_database`
 Create a new database instance.
 
 **Parameters:**
-- `database_type` (required): Engine type - `postgres_database`, `mysql_database`, `oracle_database`, `sqlserver_database`, `mariadb_database`, `saphana_database`, `mongodb_database`
+- `databaseType` (required): Engine type - `postgres_database`, `mysql_database`, `oracle_database`, `sqlserver_database`, `mariadb_database`, `saphana_database`, `mongodb_database`
 - `name` (required): Database instance name
-- `software_profile_id` (required): Software profile UUID
-- `compute_profile_id` (required): Compute profile UUID
-- `network_profile_id` (required): Network profile UUID
-- `cluster_id` (required): Target cluster UUID
-- `provision_info` (required): Database-specific configuration parameters
+- `softwareProfileId` (required): Software profile UUID
+- `computeProfileId` (required): Compute profile UUID
+- `networkProfileId` (required): Network profile UUID
+- `nxClusterId` (required): Target cluster UUID
+- `timeMachineInfo` (optional): Time machine configuration
+- `actionArguments` (optional): Additional configuration parameters
 
 **Example Usage:**
 ```
@@ -84,15 +86,15 @@ Provision a new PostgreSQL database named 'dev-analytics'
 Create a MySQL database with compute profile 'medium'
 ```
 
-### `ndb-register-database`
+### `register_database`
 Register an existing database with NDB.
 
 **Parameters:**
-- `database_type` (required): Database engine type
-- `vm_ip` (required): Database server IP address
-- `database_name` (required): Name of existing database
-- `cluster_id` (required): Target cluster UUID
-- `application_info` (required): Database connection and configuration details
+- `databaseType` (required): Database engine type
+- `databaseName` (required): Name of existing database
+- `vmIp` (required): Database server IP address
+- `nxClusterId` (required): Target cluster UUID
+- `actionArguments` (optional): Database connection and configuration details
 
 **Example Usage:**
 ```
@@ -100,11 +102,11 @@ Register existing PostgreSQL database at 192.168.1.100
 Add Oracle database 'legacy-system' to NDB management
 ```
 
-### `ndb-update-database`
+### `update_database`
 Update database properties like name, description, or tags.
 
 **Parameters:**
-- `database_id` (required): Database UUID
+- `databaseId` (required): Database UUID
 - `name` (optional): New database name
 - `description` (optional): New description
 - `tags` (optional): Array of tag objects
@@ -115,15 +117,14 @@ Rename database to 'sales-production'
 Update database description and add environment tags
 ```
 
-### `ndb-delete-database`
+### `deregister_database`
 Deregister and optionally delete a database.
 
 **Parameters:**
-- `database_id` (required): Database UUID
+- `databaseId` (required): Database UUID
 - `delete` (optional): Delete database from server (boolean)
 - `remove` (optional): Remove from cluster (boolean)
-- `soft_remove` (optional): Soft delete only (boolean)
-- `delete_time_machine` (optional): Delete associated time machine (boolean)
+- `deleteTimeMachine` (optional): Delete associated time machine (boolean)
 
 **Example Usage:**
 ```
@@ -131,42 +132,63 @@ Safely remove database 'test-env' including time machine
 Delete database but keep backups
 ```
 
-### `ndb-restore-database`
-Restore database to a specific point in time.
+## Database Server Tools
+
+### `list_dbservers`
+Get list of all database servers.
 
 **Parameters:**
-- `database_id` (required): Target database UUID
-- `snapshot_id` (optional): Specific snapshot to restore from
-- `pitr_timestamp` (optional): Point-in-time recovery timestamp
-- `latest_snapshot` (optional): Use latest available snapshot (boolean)
+- `valueType` (optional): Filter type - `ip`, `name`, `vm-cluster-name`, `vm-cluster-uuid`, `dbserver-cluster-id`, `nx-cluster-id`, `fqdn`
+- `value` (optional): Filter value corresponding to valueType
+- `loadDatabases` (optional): Load associated databases (boolean)
+- `loadClones` (optional): Load associated clones (boolean)
+- `detailed` (optional): Load entities with entire details (boolean)
 
 **Example Usage:**
 ```
-Restore database to yesterday at 2 PM
-Restore from latest snapshot
-Restore database to specific snapshot ID abc123
+List all database servers in cluster
+Show servers with their databases
 ```
 
-### `ndb-get-database-inputs`
-Get input parameters required for provisioning a specific database type.
+### `get_dbserver`
+Get database server details.
 
 **Parameters:**
-- `database_engine` (required): Database engine type
-- `operation` (required): Operation type - `provision` or `register`
+- `dbserverId` (required): Database server ID or other identifier
+- `valueType` (optional): Type of identifier - `id`, `ip`, `name`, `vm-cluster-name`, `vm-cluster-uuid`, `dbserver-cluster-id`, `nx-cluster-id`, `fqdn`
+- `loadDatabases` (optional): Load associated databases (boolean)
+- `loadClones` (optional): Load associated clones (boolean)
 
 **Example Usage:**
 ```
-Get provisioning parameters for PostgreSQL
-Show registration inputs for Oracle database
+Show details for database server by IP
+Get server configuration and hosted databases
+```
+
+### `register_dbserver`
+Register an existing database server with NDB.
+
+**Parameters:**
+- `vmIp` (required): IP address of the database server VM
+- `nxClusterUuid` (required): Nutanix cluster UUID
+- `databaseType` (required): Database engine type
+- `username` (required): Username for VM access
+- `password` (required): Password for VM access
+- `actionArguments` (optional): Additional configuration arguments
+
+**Example Usage:**
+```
+Register database server at 192.168.1.50
+Add existing Oracle server to NDB management
 ```
 
 ## Clone Tools
 
-### `ndb-list-clones`
+### `list_clones`
 List all database clones.
 
 **Parameters:**
-- `value_type` (optional): Filter type - `id`, `name`, `database-name`
+- `valueType` (optional): Filter type - `id`, `name`, `database-name`
 - `value` (optional): Filter value
 - `detailed` (optional): Load detailed information (boolean)
 
@@ -176,12 +198,12 @@ List all clones created this month
 Show test environment clones
 ```
 
-### `ndb-get-clone`
+### `get_clone`
 Get detailed information for a specific clone.
 
 **Parameters:**
-- `clone_id` (required): Clone identifier
-- `value_type` (optional): Type of identifier
+- `cloneId` (required): Clone identifier
+- `valueType` (optional): Type of identifier - `id`, `name`, `database-name`
 - `detailed` (optional): Load full details (boolean)
 
 **Example Usage:**
@@ -190,16 +212,19 @@ Show details for clone 'test-branch-1'
 Get clone status and configuration
 ```
 
-### `ndb-create-clone`
+### `create_clone`
 Create a new database clone from a time machine.
 
 **Parameters:**
-- `time_machine_id` (required): Source time machine UUID
+- `timeMachineId` (required): Source time machine UUID
 - `name` (required): Clone name
-- `snapshot_id` (optional): Specific snapshot to clone from
-- `pitr_timestamp` (optional): Point-in-time for clone
-- `cluster_id` (required): Target cluster UUID
-- `latest_snapshot` (optional): Use latest snapshot (boolean)
+- `description` (optional): Clone description
+- `snapshotId` (optional): Specific snapshot to clone from
+- `createDbserver` (optional): Create new database server for clone (boolean)
+- `nxClusterId` (optional): Target Nutanix cluster ID
+- `computeProfileId` (optional): Compute profile ID
+- `networkProfileId` (optional): Network profile ID
+- `actionArguments` (optional): Clone-specific arguments
 
 **Example Usage:**
 ```
@@ -207,14 +232,13 @@ Create clone 'dev-test' from production database
 Clone database to specific timestamp for debugging
 ```
 
-### `ndb-refresh-clone`
-Refresh a clone with recent data from source.
+### `refresh_clone`
+Refresh a clone with latest data from source.
 
 **Parameters:**
-- `clone_id` (required): Clone UUID
-- `snapshot_id` (optional): Specific snapshot to refresh from
-- `pitr_timestamp` (optional): Point-in-time for refresh
-- `latest_snapshot` (optional): Use latest snapshot (boolean)
+- `cloneId` (required): Clone ID
+- `snapshotId` (optional): Specific snapshot to refresh from
+- `latestSnapshot` (optional): Use latest available snapshot (boolean)
 
 **Example Usage:**
 ```
@@ -222,14 +246,14 @@ Refresh test clone with latest production data
 Update clone to yesterday's snapshot
 ```
 
-### `ndb-delete-clone`
-Delete a database clone.
+### `delete_clone`
+Delete/deregister a clone.
 
 **Parameters:**
-- `clone_id` (required): Clone UUID
-- `delete` (optional): Delete VM and storage (boolean)
-- `remove` (optional): Remove from cluster (boolean)
-- `soft_remove` (optional): Soft delete only (boolean)
+- `cloneId` (required): Clone ID
+- `delete` (optional): Delete the clone database (boolean)
+- `remove` (optional): Remove clone infrastructure (boolean)
+- `deleteTimeMachine` (optional): Delete associated time machine (boolean)
 
 **Example Usage:**
 ```
@@ -237,28 +261,16 @@ Remove test clone completely
 Soft delete clone but keep snapshots
 ```
 
-### `ndb-get-clone-inputs`
-Get input parameters for clone operations.
-
-**Parameters:**
-- `database_engine` (required): Database engine type
-
-**Example Usage:**
-```
-Get clone parameters for PostgreSQL
-Show required inputs for MySQL clone
-```
-
 ## Time Machine Tools
 
-### `ndb-list-time-machines`
-List all time machines.
+### `list_time_machines`
+Get list of all time machines.
 
 **Parameters:**
-- `value_type` (optional): Filter type - `id`, `name`
+- `valueType` (optional): Filter type - `id`, `name`
 - `value` (optional): Filter value
-- `load_database` (optional): Include database info (boolean)
-- `load_clones` (optional): Include clone info (boolean)
+- `loadDatabase` (optional): Include database info (boolean)
+- `loadClones` (optional): Include clone info (boolean)
 
 **Example Usage:**
 ```
@@ -266,13 +278,13 @@ List all time machines for production databases
 Show time machines with associated clones
 ```
 
-### `ndb-get-time-machine`
-Get detailed information for a specific time machine.
+### `get_time_machine`
+Get time machine details.
 
 **Parameters:**
-- `time_machine_id` (required): Time machine identifier
-- `value_type` (optional): Type of identifier
-- `detailed` (optional): Load full details (boolean)
+- `timeMachineId` (required): Time machine ID or name
+- `valueType` (optional): Type of identifier - `id`, `name`
+- `detailed` (optional): Load entities with entire details (boolean)
 
 **Example Usage:**
 ```
@@ -280,13 +292,13 @@ Show time machine details for 'sales-prod-tm'
 Get recovery capability for time machine
 ```
 
-### `ndb-get-time-machine-capability`
-Get recovery capabilities and available restore points.
+### `get_time_machine_capability`
+Get recovery capability of a time machine.
 
 **Parameters:**
-- `time_machine_id` (required): Time machine UUID
-- `load_snapshots` (optional): Include snapshot list (boolean)
-- `load_logs` (optional): Include log information (boolean)
+- `timeMachineId` (required): Time machine ID
+- `timeZone` (optional): Time zone for timestamps (default: UTC)
+- `loadHealth` (optional): Include health information (boolean)
 
 **Example Usage:**
 ```
@@ -294,11 +306,12 @@ Check recovery options for production database
 Show available restore points for last 7 days
 ```
 
-### `ndb-pause-time-machine`
-Pause time machine operations.
+### `pause_time_machine`
+Pause a time machine.
 
 **Parameters:**
-- `time_machine_id` (required): Time machine UUID
+- `timeMachineId` (required): Time machine ID
+- `forced` (optional): Force pause operation (boolean)
 - `reason` (optional): Reason for pausing
 
 **Example Usage:**
@@ -307,12 +320,12 @@ Pause time machine for maintenance window
 Temporarily stop backups for database migration
 ```
 
-### `ndb-resume-time-machine`
-Resume time machine operations.
+### `resume_time_machine`
+Resume a paused time machine.
 
 **Parameters:**
-- `time_machine_id` (required): Time machine UUID
-- `reset_capability` (optional): Reset recovery capability (boolean)
+- `timeMachineId` (required): Time machine ID
+- `resetCapability` (optional): Reset capability after resume (boolean)
 
 **Example Usage:**
 ```
@@ -320,44 +333,16 @@ Resume time machine after maintenance
 Restart backups and reset capability timeline
 ```
 
-### `ndb-update-time-machine`
-Update time machine properties.
-
-**Parameters:**
-- `time_machine_id` (required): Time machine UUID
-- `name` (optional): New name
-- `description` (optional): New description
-- `sla_id` (optional): New SLA policy UUID
-- `schedule_id` (optional): New schedule UUID
-
-**Example Usage:**
-```
-Update time machine SLA policy
-Change backup schedule for weekend maintenance
-```
-
-### `ndb-perform-log-catchup`
-Manually trigger log catchup operation.
-
-**Parameters:**
-- `time_machine_id` (required): Time machine UUID
-- `switch_log` (optional): Force log switch (boolean)
-
-**Example Usage:**
-```
-Force log catchup before creating clone
-Ensure latest logs are captured
-```
-
 ## Snapshot Tools
 
-### `ndb-list-snapshots`
+### `list_snapshots`
 List all snapshots across time machines.
 
 **Parameters:**
-- `value_type` (optional): Filter type - `type`, `status`, `time-machine`
+- `valueType` (optional): Filter type - `type`, `status`, `protection-domain-id`, `database-node`, `snapshot-id`, `time-machine`, `latest`
 - `value` (optional): Filter value
-- `database_ids` (optional): Comma-separated database IDs
+- `databaseIds` (optional): Comma-separated database IDs
+- `limit` (optional): Number of snapshots to return (default: 100)
 
 **Example Usage:**
 ```
@@ -365,12 +350,12 @@ List all snapshots from last week
 Show failed snapshots that need attention
 ```
 
-### `ndb-get-snapshot`
+### `get_snapshot`
 Get detailed information for a specific snapshot.
 
 **Parameters:**
-- `snapshot_id` (required): Snapshot UUID
-- `load_replicated_snapshots` (optional): Include replication info (boolean)
+- `snapshotId` (required): Snapshot UUID
+- `timeZone` (optional): Time zone for timestamps (default: UTC)
 
 **Example Usage:**
 ```
@@ -378,13 +363,13 @@ Show snapshot details and file list
 Check snapshot replication status
 ```
 
-### `ndb-create-snapshot`
+### `take_snapshot`
 Take an on-demand snapshot.
 
 **Parameters:**
-- `time_machine_id` (required): Time machine UUID
+- `timeMachineId` (required): Time machine UUID
 - `name` (optional): Snapshot name
-- `lcm_config` (optional): Lifecycle management configuration
+- `expireInDays` (optional): Snapshot expiry in days
 
 **Example Usage:**
 ```
@@ -392,11 +377,11 @@ Take snapshot before major deployment
 Create named snapshot 'pre-migration-backup'
 ```
 
-### `ndb-delete-snapshot`
+### `delete_snapshot`
 Delete a specific snapshot.
 
 **Parameters:**
-- `snapshot_id` (required): Snapshot UUID
+- `snapshotId` (required): Snapshot UUID
 
 **Example Usage:**
 ```
@@ -406,8 +391,11 @@ Delete corrupted snapshot
 
 ## Infrastructure Tools
 
-### `ndb-list-clusters`
-List all NDB clusters.
+### `list_clusters`
+List all Nutanix clusters.
+
+**Parameters:**
+- `includeManagementServerInfo` (optional): Include management server information (boolean)
 
 **Example Usage:**
 ```
@@ -415,7 +403,19 @@ Show all available clusters
 List clusters with their capacity
 ```
 
-### `ndb-list-profiles`
+### `get_cluster`
+Get cluster details by ID.
+
+**Parameters:**
+- `clusterId` (required): Cluster ID
+
+**Example Usage:**
+```
+Show details for cluster 'prod-cluster-1'
+Get cluster capacity and configuration
+```
+
+### `list_profiles`
 List all profiles (software, compute, network, database parameter).
 
 **Parameters:**
@@ -428,7 +428,7 @@ List all PostgreSQL software profiles
 Show available compute profiles
 ```
 
-### `ndb-list-slas`
+### `list_slas`
 List all SLA policies.
 
 **Example Usage:**
@@ -437,12 +437,27 @@ Show backup retention policies
 List all available SLA templates
 ```
 
-### `ndb-list-operations`
+### `get_sla`
+Get SLA details by ID or name.
+
+**Parameters:**
+- `slaId` (required): SLA ID or name
+- `byName` (optional): Whether to search by name instead of ID (boolean)
+
+**Example Usage:**
+```
+Show details for SLA policy 'production-backup'
+Get retention settings for specific SLA
+```
+
+### `list_operations`
 List recent NDB operations.
 
 **Parameters:**
 - `days` (optional): Number of days to look back
+- `entityId` (optional): Filter by entity ID
 - `status` (optional): Filter by operation status
+- `limit` (optional): Limit number of results
 
 **Example Usage:**
 ```
@@ -450,11 +465,12 @@ Show failed operations from last 24 hours
 List all operations for specific database
 ```
 
-### `ndb-get-operation`
+### `get_operation`
 Get detailed information for a specific operation.
 
 **Parameters:**
-- `operation_id` (required): Operation UUID
+- `operationId` (required): Operation UUID
+- `timeZone` (optional): Time zone for timestamps (default: UTC)
 
 **Example Usage:**
 ```
@@ -462,27 +478,52 @@ Check status of database provisioning operation
 Get error details for failed clone operation
 ```
 
+### `list_alerts`
+Get list of all alerts.
+
+**Parameters:**
+- `resolved` (optional): Filter by resolution status
+- `timeInterval` (optional): Time interval filter
+
+**Example Usage:**
+```
+Show unresolved alerts
+List all alerts from last week
+```
+
+### `get_alert`
+Get alert details by ID.
+
+**Parameters:**
+- `alertId` (required): Alert ID
+
+**Example Usage:**
+```
+Show details for critical alert
+Get alert resolution history
+```
+
 ## Response Formats
 
 ### Success Response
 ```json
 {
-  "success": true,
-  "data": {
+  \"success\": true,
+  \"data\": {
     // Tool-specific response data
   },
-  "message": "Operation completed successfully"
+  \"message\": \"Operation completed successfully\"
 }
 ```
 
 ### Error Response
 ```json
 {
-  "success": false,
-  "error": {
-    "code": "ERROR_CODE",
-    "message": "Human-readable error message",
-    "details": {
+  \"success\": false,
+  \"error\": {
+    \"code\": \"ERROR_CODE\",
+    \"message\": \"Human-readable error message\",
+    \"details\": {
       // Additional error context
     }
   }
@@ -532,9 +573,9 @@ The NDB MCP Server implements automatic retry with exponential backoff for faile
 The MCP server is designed for natural language interactions:
 
 ```
-✅ Good: "Create a PostgreSQL clone from production for testing"
-✅ Good: "Show me all failed operations from yesterday"
-✅ Good: "Pause the time machine for maintenance"
+✅ Good: \"Create a PostgreSQL clone from production for testing\"
+✅ Good: \"Show me all failed operations from yesterday\"
+✅ Good: \"Pause the time machine for maintenance\"
 
 ❌ Avoid: Complex technical parameters in natural language
 ❌ Avoid: Multiple operations in single request
