@@ -18,10 +18,24 @@
  *   NDB_VERIFY_SSL - Verify SSL certificates (optional, default: true)
  */
 
-const https = require('https');
-const http = require('http');
-const { URL } = require('url');
-require('dotenv').config();
+import https from 'https';
+import http from 'http';
+import { URL } from 'url';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+import { readFileSync, existsSync } from 'fs';
+import dotenv from 'dotenv';
+
+// ES6 equivalent of __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Load .env file if it exists
+const projectRoot = join(__dirname, '..');
+const envPath = join(projectRoot, '.env');
+if (existsSync(envPath)) {
+  dotenv.config({ path: envPath });
+}
 
 // ANSI color codes for console output
 const colors = {
@@ -371,11 +385,7 @@ function displayEnvironmentInfo() {
   console.log(`Working directory: ${process.cwd()}`);
   
   // Check for .env file
-  const fs = require('fs');
-  const path = require('path');
-  const envPath = path.join(process.cwd(), '.env');
-  
-  if (fs.existsSync(envPath)) {
+  if (existsSync(envPath)) {
     logInfo('.env file found and loaded');
   } else {
     logWarning('.env file not found - using system environment variables');
