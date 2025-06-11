@@ -168,10 +168,10 @@ def test_basic_functionality():
         
         print()
         
-        # Test 2: Call a simple tool
-        print("🔧 Test 2: Call ndb_list_databases tool")
+        # Test 2: Call a simple tool (using correct tool name)
+        print("🔧 Test 2: Call list_databases tool")
         response = client.send_request("tools/call", {
-            "name": "ndb_list_databases",
+            "name": "list_databases",
             "arguments": {}
         })
         
@@ -189,28 +189,60 @@ def test_basic_functionality():
             else:
                 print("⚠️  Empty response from database list")
         else:
-            print("❌ Failed to call ndb_list_databases")
+            print("❌ Failed to call list_databases")
             print(f"Response: {response}")
         
         print()
         
-        # Test 3: Call tool with parameters
-        print("🔧 Test 3: Call ndb_list_clusters tool")
+        # Test 3: Call tool with parameters (using correct tool name)
+        print("🔧 Test 3: Call list_clusters tool")
         response = client.send_request("tools/call", {
-            "name": "ndb_list_clusters", 
+            "name": "list_clusters", 
             "arguments": {}
         })
         
         if response and "result" in response:
-            print("✅ Cluster list retrieved successfully")
+            content = response["result"]["content"]
+            if content and len(content) > 0:
+                print("✅ Cluster list retrieved successfully")
+                print(f"   Response type: {content[0].get('type', 'unknown')}")
+                if content[0].get("type") == "text":
+                    text_content = content[0].get("text", "")
+                    lines = text_content.split('\n')[:2]  # First 2 lines
+                    for line in lines:
+                        if line.strip():
+                            print(f"   {line}")
+            else:
+                print("⚠️  Empty response from cluster list")
         else:
-            print("❌ Failed to call ndb_list_clusters")
+            print("❌ Failed to call list_clusters")
             print(f"Response: {response}")
             
         print()
         
-        # Test 4: Test error handling
-        print("🔧 Test 4: Test error handling with invalid tool")
+        # Test 4: Call a tool that requires parameters
+        print("🔧 Test 4: Call get_database tool with specific parameters")
+        response = client.send_request("tools/call", {
+            "name": "get_database",
+            "arguments": {
+                "database_id": "test",
+                "value_type": "name"
+            }
+        })
+        
+        if response and "result" in response:
+            print("✅ get_database tool executed (may not find 'test' database)")
+        elif response and "error" in response:
+            print("✅ get_database tool executed with expected error (database not found)")
+            print(f"   Error: {response['error']['message'][:100]}...")
+        else:
+            print("❌ Failed to call get_database")
+            print(f"Response: {response}")
+            
+        print()
+        
+        # Test 5: Test error handling
+        print("🔧 Test 5: Test error handling with invalid tool")
         response = client.send_request("tools/call", {
             "name": "invalid_tool_name",
             "arguments": {}
