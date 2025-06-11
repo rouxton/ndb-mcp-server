@@ -117,7 +117,8 @@ export class NDBClient {
       console.log('✅ NDB connection test successful');
       return true;
     } catch (error) {
-      console.error('❌ NDB connection test failed:', error.message);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      console.error('❌ NDB connection test failed:', errorMessage);
       return false;
     }
   }
@@ -129,7 +130,8 @@ export class NDBClient {
     try {
       return await this.get('/clusters');
     } catch (error) {
-      throw new Error(`Failed to get server info: ${error}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to get server info: ${errorMessage}`);
     }
   }
 }
