@@ -67,10 +67,30 @@ Add to your Claude Desktop configuration:
 - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
 
+## 🧪 Testing
+
+Before integrating with Claude Desktop, test your server directly:
+
+```bash
+# Test NDB connectivity
+npm run test:connection
+
+# Test MCP functionality
+npm run test:mcp
+
+# Interactive testing with web interface
+npm run test:inspector
+
+# Run all tests
+npm run test:all
+```
+
+For comprehensive testing documentation, see **[Testing Guide](docs/TESTING.md)**.
+
 ## 🎯 Features
 
 ### Database Management
-- 📊 **List and monitor** all databases across your NDB environment
+- 📋 **List and monitor** all databases across your NDB environment
 - 🔧 **Provision new databases** with custom configurations
 - 📝 **Register existing databases** into NDB management
 - ✏️ **Update database properties** and lifecycle settings
@@ -79,7 +99,7 @@ Add to your Claude Desktop configuration:
 ### Clone Operations
 - 🔄 **Create database clones** from snapshots or point-in-time
 - 🔃 **Refresh clones** with latest production data
-- 📋 **Manage clone lifecycle** and resource allocation
+- 📊 **Manage clone lifecycle** and resource allocation
 - 🧹 **Cleanup and remove** unnecessary clones
 
 ### Time Machine & Backup
@@ -119,6 +139,7 @@ Once configured, interact with your NDB environment using natural language:
 - 📖 **[Installation Guide](docs/installation.md)** - Detailed setup instructions
 - ⚙️ **[Configuration Guide](docs/configuration.md)** - Environment and security setup
 - 💡 **[Usage Examples](docs/usage-examples.md)** - Comprehensive usage scenarios
+- 🔧 **[Testing Guide](docs/TESTING.md)** - Complete testing documentation
 - 🔧 **[Troubleshooting](docs/troubleshooting.md)** - Common issues and solutions
 - 🔒 **[Security Guide](docs/security.md)** - Security best practices
 - 📝 **[API Reference](docs/api-reference.md)** - Complete tool documentation
