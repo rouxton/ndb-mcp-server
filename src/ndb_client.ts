@@ -11,7 +11,6 @@ import type { NDBConfig } from './types.js';
 export class NDBClient {
   private client: AxiosInstance;
   private config: NDBConfig;
-  private authToken?: string;
 
   constructor(config: NDBConfig) {
     this.config = config;
@@ -23,6 +22,7 @@ export class NDBClient {
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
+        'User-Agent': 'NDB-MCP-Server/1.0'
       },
       httpsAgent: new https.Agent({
         rejectUnauthorized: config.verifySsl !== false
@@ -30,64 +30,38 @@ export class NDBClient {
     });
 
     // Add request interceptor to handle authentication
-    this.client.interceptors.request.use(async (config) => {
-      if (!this.authToken) {
-        await this.authenticate();
-      }
-      
-      if (this.authToken) {
-        config.headers.Authorization = `Bearer ${this.authToken}`;
-      } else {
-        // Fallback to basic auth
-        const auth = Buffer.from(`${this.config.username}:${this.config.password}`).toString('base64');
-        config.headers.Authorization = `Basic ${auth}`;
-      }
+    // Use simple Basic Auth that we know works from the test script
+    this.client.interceptors.request.use((config) => {
+      // Create Basic Auth header using the same method as test script
+      const credentials = `${this.config.username}:${this.config.password}`;
+      const base64Credentials = Buffer.from(credentials, 'utf8').toString('base64');
+      config.headers.Authorization = `Basic ${base64Credentials}`;
       
       return config;
     });
 
-    // Add response interceptor to handle token refresh
+    // Add response interceptor for error handling
     this.client.interceptors.response.use(
       (response) => response,
       async (error) => {
-        if (error.response?.status === 401 && this.authToken) {
-          // Token expired, try to re-authenticate
-          this.authToken = undefined;
-          await this.authenticate();
-          // Retry the original request
-          return this.client.request(error.config);
+        if (error.response?.status === 401) {
+          console.error('❌ Authentication failed - check NDB credentials');
+        } else if (error.response?.status === 403) {
+          console.error('❌ Access forbidden - user may lack required permissions');
+        } else if (error.response?.status === 404) {
+          console.error('❌ API endpoint not found - verify NDB version and URL');
+        } else if (error.code === 'ECONNREFUSED') {
+          console.error('❌ Connection refused - NDB server may be down or unreachable');
+        } else if (error.code === 'ENOTFOUND') {
+          console.error('❌ DNS resolution failed - cannot resolve NDB server hostname');
+        } else if (error.code === 'CERT_HAS_EXPIRED') {
+          console.error('❌ SSL certificate has expired - consider setting NDB_VERIFY_SSL=false for testing');
+        } else if (error.code === 'SELF_SIGNED_CERT_IN_CHAIN') {
+          console.error('❌ Self-signed certificate detected - consider setting NDB_VERIFY_SSL=false for development');
         }
         return Promise.reject(error);
       }
     );
-  }
-
-  /**
-   * Authenticate with NDB server
-   * Attempts token-based auth first, falls back to basic auth
-   */
-  private async authenticate(): Promise<void> {
-    try {
-      // NDB typically uses basic auth, but this structure allows for token-based auth if available
-      const auth = Buffer.from(`${this.config.username}:${this.config.password}`).toString('base64');
-      const response = await axios.post(`${this.config.baseUrl}/era/v0.9/auth/login`, {}, {
-        headers: {
-          'Authorization': `Basic ${auth}`,
-          'Content-Type': 'application/json'
-        },
-        httpsAgent: new https.Agent({
-          rejectUnauthorized: this.config.verifySsl !== false
-        })
-      });
-      
-      if (response.data?.token) {
-        this.authToken = response.data.token;
-        console.error('✅ Token authentication successful');
-      }
-    } catch (error) {
-      // If token auth fails, fall back to basic auth
-      console.error('⚠️ Token authentication failed, using basic auth');
-    }
   }
 
   /**
@@ -140,9 +114,10 @@ export class NDBClient {
   async testConnection(): Promise<boolean> {
     try {
       await this.get('/clusters');
+      console.log('✅ NDB connection test successful');
       return true;
     } catch (error) {
-      console.error('❌ Connection test failed:', error);
+      console.error('❌ NDB connection test failed:', error.message);
       return false;
     }
   }
