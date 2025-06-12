@@ -724,6 +724,35 @@ export const tools = [
       }
     }
   },
+  {
+    name: 'get_profile',
+    description: 'Get profile details by ID or name',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        profileId: {
+          type: 'string',
+          description: 'Profile ID or name'
+        },
+        byName: {
+          type: 'boolean',
+          description: 'Whether to search by name instead of ID',
+          default: false
+        },
+        engine: {
+          type: 'string',
+          description: 'Filter by database engine (required when searching by name)',
+          enum: ['oracle_database', 'postgres_database', 'sqlserver_database', 'mariadb_database', 'mysql_database', 'saphana_database', 'mongodb_database']
+        },
+        type: {
+          type: 'string',
+          description: 'Filter by profile type (required when searching by name)',
+          enum: ['Software', 'Compute', 'Network', 'Database_Parameter']
+        }
+      },
+      required: ['profileId']
+    }
+  },
 
   // SLA Management
   {

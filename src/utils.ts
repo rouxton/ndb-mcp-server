@@ -243,10 +243,22 @@ function formatValue(value: any): string {
     if (value.length === 0) {
       return '[]';
     }
-    if (value.length <= 3) {
-      return `[${value.join(', ')}]`;
+    // If array contains only primitives, join as before
+    if (value.every(item => (typeof item !== 'object' || item === null))) {
+      if (value.length <= 3) {
+        return `[${value.join(', ')}]`;
+      }
+      return `[${value.length} items: ${value.slice(0, 2).join(', ')}...]`;
     }
-    return `[${value.length} items: ${value.slice(0, 2).join(', ')}...]`;
+    // If array contains objects, pretty print each item
+    return '[\n' + value.map((item, idx) => {
+      if (typeof item === 'object' && item !== null) {
+        // Indent nested objects for readability
+        const formatted = JSON.stringify(item, null, 2).replace(/^/gm, '  ');
+        return `  [${idx}]:\n${formatted}`;
+      }
+      return `  [${idx}]: ${String(item)}`;
+    }).join(',\n') + '\n]';
   }
   
   if (typeof value === 'object') {

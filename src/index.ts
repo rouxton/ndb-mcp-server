@@ -152,6 +152,8 @@ async function handleToolCall(name: string, args: ToolCallArgs): Promise<any> {
       return handleGetCluster(args);
     case 'list_profiles':
       return handleListProfiles(args);
+    case 'get_profile':
+      return handleGetProfile(args);  
     case 'list_slas':
       return handleListSlas(args);
     case 'get_sla':
@@ -412,6 +414,35 @@ async function handleListProfiles(args: any) {
     type: args.type
   };
   return await ndbClient.get('/profiles', params);
+}
+
+async function handleGetProfile(args: any) {
+  const params = {
+    id: args.byName ? undefined : args.profileId,
+    name: args.byName ? args.profileId : undefined,
+    engine: args.engine,
+    type: args.type
+  };
+  
+  // Filter out undefined values
+  const filteredParams = Object.fromEntries(
+    Object.entries(params).filter(([_, value]) => value !== undefined)
+  );
+  
+  const profiles = await ndbClient.get('/profiles', filteredParams);
+
+  // Always return the full object(s) as received from the API
+  if (Array.isArray(profiles)) {
+    if (profiles.length === 1) {
+      return profiles[0]; // full details, including versions
+    } else if (profiles.length === 0) {
+      throw new McpError(ErrorCode.InvalidRequest, `Profile not found: ${args.profileId}`);
+    } else {
+      // Multiple matches - return all for user to choose, with full details
+      return profiles;
+    }
+  }
+  return profiles; // full details if not an array
 }
 
 async function handleListSlas(args: any) {
