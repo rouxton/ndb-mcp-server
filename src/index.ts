@@ -94,8 +94,10 @@ async function handleToolCall(name: string, args: ToolCallArgs): Promise<any> {
       return handleListDatabases(args);
     case 'get_database':
       return handleGetDatabase(args);
+    case 'get_provision_inputs':
+      return handleGetProvisionInputs(args);
     case 'provision_database':
-      return handleProvisionDatabase(args);
+      return handleProvisionDatabase(args); 
     case 'register_database':
       return handleRegisterDatabase(args);
     case 'update_database':
@@ -193,7 +195,42 @@ async function handleGetDatabase(args: any) {
   return await ndbClient.get(`/databases/${args.databaseId}`, params);
 }
 
+async function handleGetProvisionInputs(args: any) {
+  const category = 'db_server;database'; 
+  return await ndbClient.get(`/app_types/${args.databaseEngine}/provision/input-file`, { category });
+}
+
 async function handleProvisionDatabase(args: any) {
+  // If skipValidation is true, use the executeProvisionDatabase function directly
+  if (args.skipValidation) {
+    return await executeProvisionDatabase(args);
+  }
+
+  // Step 1: Fetch engine-specific parameters
+  const inputFile = await ndbClient.get(`/app_types/${args.databaseType}/provision/input-file`, {
+    category: 'db_server;database'
+  });
+
+  // Step 2: Check and collect missing resources
+  const missingParams = await validateAndCollectMissingParams(args);
+
+  if (missingParams.length > 0) {
+    // Return a help message with missing parameters and suggestions
+    return {
+      status: 'validation_required',
+      message: 'Some required parameters are missing. Please provide the following:',
+      missingParameters: missingParams,
+      engineSpecificInputs: inputFile,
+      suggestions: await generateSuggestions(args, missingParams)
+    };
+  }
+
+  // If all parameters are present, proceed with provisioning
+  return await executeProvisionDatabase(args);
+}
+
+// Function to execute provisioning with all parameters
+async function executeProvisionDatabase(args: any) {
   const data = {
     databaseType: args.databaseType,
     name: args.name,
@@ -204,7 +241,146 @@ async function handleProvisionDatabase(args: any) {
     timeMachineInfo: parseJsonArgument(args.timeMachineInfo),
     actionArguments: args.actionArguments || []
   };
+
+  // Add optional parameters if they exist
+  if (args.slaId) {
+    data.timeMachineInfo = data.timeMachineInfo || {};
+    data.timeMachineInfo.slaId = args.slaId;
+  }
+
   return await ndbClient.post('/databases/provision', data);
+}
+
+async function validateAndCollectMissingParams(args: any) {
+  const missing = [];
+
+  // Vérifier les paramètres communs requis
+  if (!args.softwareProfileId) {
+    missing.push({
+      parameter: 'softwareProfileId',
+      description: 'Software profile ID required for database provisioning',
+      type: 'required'
+    });
+  }
+
+  if (!args.computeProfileId) {
+    missing.push({
+      parameter: 'computeProfileId', 
+      description: 'Compute profile ID required for resource allocation',
+      type: 'required'
+    });
+  }
+
+  if (!args.networkProfileId) {
+    missing.push({
+      parameter: 'networkProfileId',
+      description: 'Network profile ID required for network configuration', 
+      type: 'required'
+    });
+  }
+
+  if (!args.nxClusterId) {
+    missing.push({
+      parameter: 'nxClusterId',
+      description: 'Nutanix cluster ID required for placement',
+      type: 'required'
+    });
+  }
+
+  // Vérifier les paramètres spécifiques au moteur
+  const engineInputs = await ndbClient.get(`/app_types/${args.databaseType}/provision/input-file`, { 
+    category: 'db_server;database' 
+  });
+
+  if (engineInputs?.properties) {
+    for (const prop of engineInputs.properties) {
+      if (prop.required === 'true' || prop.required === true) {
+        const hasValue = args.actionArguments?.some((arg: any) => arg.name === prop.name);
+        if (!hasValue) {
+          missing.push({
+            parameter: prop.name,
+            description: prop.description || prop.display_name,
+            type: 'engine_specific',
+            engineProperty: true,
+            defaultValue: prop.default_value
+          });
+        }
+      }
+    }
+  }
+
+  return missing;
+}
+
+// Function to generate suggestions
+async function generateSuggestions(args: any, missingParams: any[]) {
+  const suggestions: any = {};
+
+  for (const param of missingParams) {
+    try {
+      switch (param.parameter) {
+        case 'nxClusterId':
+          const clusters = await ndbClient.get('/clusters');
+          suggestions.clusters = clusters.map((c: any) => ({
+            id: c.id,
+            name: c.name,
+            status: c.status
+          }));
+          break;
+
+        case 'softwareProfileId':
+          const swProfiles = await ndbClient.get('/profiles', { 
+            engine: args.databaseType, 
+            type: 'Software' 
+          });
+          suggestions.softwareProfiles = swProfiles.map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            engineType: p.engineType,
+            dbVersion: p.dbVersion
+          }));
+          break;
+
+        case 'computeProfileId':
+          const compProfiles = await ndbClient.get('/profiles', { 
+            type: 'Compute' 
+          });
+          suggestions.computeProfiles = compProfiles.map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            description: p.description
+          }));
+          break;
+
+        case 'networkProfileId':
+          const netProfiles = await ndbClient.get('/profiles', { 
+            type: 'Network' 
+          });
+          suggestions.networkProfiles = netProfiles.map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            description: p.description
+          }));
+          break;
+      }
+    } catch (error) {
+      console.warn(`Failed to fetch suggestions for ${param.parameter}:`, error);
+    }
+  }
+
+  // Add suggestions for SLAs if requested
+  try {
+    const slas = await ndbClient.get('/slas');
+    suggestions.availableSLAs = slas.map((s: any) => ({
+      id: s.id,
+      name: s.name,
+      description: s.description
+    }));
+  } catch (error) {
+    console.warn('Failed to fetch SLA suggestions:', error);
+  }
+
+  return suggestions;
 }
 
 async function handleRegisterDatabase(args: any) {

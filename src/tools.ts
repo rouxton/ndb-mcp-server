@@ -58,8 +58,25 @@ export const tools = [
     }
   },
   {
+    name: 'get_provision_inputs',
+    description: 'Get required input parameters for provisioning a specific database engine',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        databaseEngine: {
+          type: 'string',
+          description: 'Database engine type',
+          enum: ['oracle_database', 'postgres_database', 'sqlserver_database', 'mariadb_database', 'mysql_database', 'saphana_database', 'mongodb_database']
+        }
+      },
+      required: ['databaseEngine']
+    }
+  },
+
+  // Outil provision_database amélioré
+  {
     name: 'provision_database',
-    description: 'Provision a new database using NDB',
+    description: 'Provision a new database using NDB with intelligent parameter validation and assistance',
     inputSchema: {
       type: 'object',
       properties: {
@@ -72,29 +89,34 @@ export const tools = [
           type: 'string',
           description: 'Database instance name'
         },
+        // Paramètres optionnels - seront proposés automatiquement si non fournis
         softwareProfileId: {
           type: 'string',
-          description: 'Software profile ID'
+          description: 'Software profile ID (will be suggested if not provided)'
         },
         computeProfileId: {
           type: 'string',
-          description: 'Compute profile ID'
+          description: 'Compute profile ID (will be suggested if not provided)'
         },
         networkProfileId: {
           type: 'string',
-          description: 'Network profile ID'
+          description: 'Network profile ID (will be suggested if not provided)'
         },
         nxClusterId: {
           type: 'string',
-          description: 'Nutanix cluster ID'
+          description: 'Nutanix cluster ID (will be suggested if not provided)'
+        },
+        slaId: {
+          type: 'string',
+          description: 'SLA ID (optional)'
         },
         timeMachineInfo: {
           type: 'object',
-          description: 'Time machine configuration'
+          description: 'Time machine configuration (optional)'
         },
         actionArguments: {
           type: 'array',
-          description: 'Additional configuration arguments',
+          description: 'Engine-specific configuration arguments (will be prompted for based on database type)',
           items: {
             type: 'object',
             properties: {
@@ -102,9 +124,15 @@ export const tools = [
               value: { type: 'string' }
             }
           }
+        },
+        // Nouveau paramètre pour forcer le provisioning sans validation
+        skipValidation: {
+          type: 'boolean',
+          description: 'Skip parameter validation and proceed directly',
+          default: false
         }
       },
-      required: ['databaseType', 'name', 'softwareProfileId', 'computeProfileId', 'networkProfileId', 'nxClusterId']
+      required: ['databaseType', 'name']
     }
   },
   {
