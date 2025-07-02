@@ -124,3 +124,12 @@ test_connection.js
 # Backup files
 *.backup
 *.bak
+
+#key files & certificates
+*.key
+*.pem
+*.pub
+*.crt
+
+
+

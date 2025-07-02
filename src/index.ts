@@ -10,7 +10,7 @@
 
 // Load environment variables from .env file
 import 'dotenv/config';
-
+// import "mcps-logger/console";
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -30,6 +30,15 @@ const server = new Server(
   {
     name: 'ndb-mcp-server',
     version: '1.0.0',
+    description: `NDB MCP Server for managing Nutanix Database Service (NDB). It provides mutliples tools to manage databases, clones, snapshots, and infrastructure through natural language commands.
+    
+    Hints:
+    - Most of the request asking for information about databases will go either through list_databases or list_dbservers, the latter being able to provide information about databases running on a specific dbserver, and thus also aother information like the cluster
+    - Use the most specific attributes first to reduce the result set.
+    - Combine multiple filters in the same query to narrow down the results.
+    - If the request fails, never try to fall back to a more generic tool, always try to fix the request by providing the missing parameters or correcting the syntax.
+
+    `,
   }
 );
 
@@ -56,12 +65,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     const result = await handleToolCall(name, args as ToolCallArgs);
     return {
-      content: [
-        {
-          type: 'text',
-          text: formatResponse(result)
-        }
-      ]
+      content: [{
+        type: "text",
+        text: JSON.stringify(result, null, 2) // JSON brut formaté
+      }]
     };
   } catch (error) {
     if (error instanceof McpError) {
@@ -152,6 +159,8 @@ async function handleToolCall(name: string, args: ToolCallArgs): Promise<any> {
       return handleListClusters(args);
     case 'get_cluster':
       return handleGetCluster(args);
+    case 'get_cluster_by_name':
+      return handleGetClusterByName(args);
     case 'list_profiles':
       return handleListProfiles(args);
     case 'get_profile':
@@ -171,20 +180,77 @@ async function handleToolCall(name: string, args: ToolCallArgs): Promise<any> {
     case 'get_alert':
       return handleGetAlert(args);
 
+    // User Management
+    case 'list_users':
+      return handleListUsers(args);
+    case 'get_user':
+      return handleGetUser(args);
+
     default:
       throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
   }
 }
 
+///////////////////////////////
 // Database Management Handlers
+///////////////////////////////
 async function handleListDatabases(args: any) {
-  const params = {
-    'value-type': args.valueType,
-    value: args.value,
-    detailed: args.detailed,
-    'load-dbserver-cluster': args.loadDbserverCluster
-  };
-  return await ndbClient.get('/databases', params);
+  const allDatabases = await ndbClient.get('/databases', null);
+
+  let filtered = allDatabases;
+  // Enhanced filtering: supports !, >, <, >=, <=, *partial*, and exact match
+  if (Array.isArray(filtered) && args.valueType && args.value) {
+    const keys = args.valueType.split(',').map((k: string) => k.trim());
+    const values = args.value.split(',').map((v: string) => v.trim());
+    filtered = filtered.filter((db: any) =>
+      keys.every((key: string, idx: number) => {
+        const val = values[idx];
+        const dbVal = db[key];
+        if (val.startsWith('!')) {
+          // Negative match
+          return String(dbVal) !== val.substring(1);
+        } else if (val.startsWith('>=')) {
+          return dbVal >= val.substring(2);
+        } else if (val.startsWith('<=')) {
+          return dbVal <= val.substring(2);
+        } else if (val.startsWith('>')) {
+          return dbVal > val.substring(1);
+        } else if (val.startsWith('<')) {
+          return dbVal < val.substring(1);
+        } else if (val.startsWith('*') && val.endsWith('*')) {
+          // Partial match (case-insensitive)
+          const search = val.slice(1, -1).toLowerCase();
+          return String(dbVal).toLowerCase().includes(search);
+        } else {
+          // Exact match
+          return String(dbVal) === val;
+        }
+      })
+    );
+  }
+  // Only keep the main properties as per the required schema
+  if (Array.isArray(filtered)) {
+    filtered = filtered.map((db: any) => ({
+      id: db.id,
+      name: db.name,
+      description: db.description,
+      ownerId: db.ownerId,
+      dateCreated: db.dateCreated,
+      dateModified: db.dateModified,
+      clustered: db.clustered,      
+      eraCreated: db.eraCreated,
+      placeholder: db.placeholder,
+      databaseName: db.databaseName,
+      type: db.type,
+      status: db.status,
+      databaseStatus: db.databaseStatus,
+      dbserverLogicalClusterId: db.dbserverLogicalClusterId,
+      timeMachineId: db.timeMachineId,
+      timeZone: db.timeZone
+    }));
+  }
+
+  return filtered;
 }
 
 async function handleGetDatabase(args: any) {
@@ -231,7 +297,7 @@ async function handleProvisionDatabase(args: any) {
 
 // Function to execute provisioning with all parameters
 async function executeProvisionDatabase(args: any) {
-  const data = {
+  const data: any = {
     databaseType: args.databaseType,
     name: args.name,
     softwareProfileId: args.softwareProfileId,
@@ -242,7 +308,60 @@ async function executeProvisionDatabase(args: any) {
     actionArguments: args.actionArguments || []
   };
 
-  // Add optional parameters if they exist
+  // add optional parameters if they exist
+  if (args.databaseDescription) {
+    data.databaseDescription = args.databaseDescription;
+  }
+
+  if (args.softwareProfileVersionId) {
+    data.softwareProfileVersionId = args.softwareProfileVersionId;
+  }
+
+  if (args.dbParameterProfileId) {
+    data.dbParameterProfileId = args.dbParameterProfileId;
+  }
+
+  if (args.newDbServerTimeZone) {
+    data.newDbServerTimeZone = args.newDbServerTimeZone;
+  }
+
+  if (args.createDbserver !== undefined) {
+    data.createDbServer = args.createDbServer;
+  }
+
+  if (args.nodeCount) {
+    data.nodeCount = args.nodeCount;
+  }
+
+  if (args.clustered !== undefined) {
+    data.clustered = args.clustered;
+  }
+
+  if (args.sshPublicKey) {
+    data.sshPublicKey = args.sshPublicKey;
+  }
+
+  if (args.autoTuneStagingDrive !== undefined) {
+    data.autoTuneStagingDrive = args.autoTuneStagingDrive;
+  }
+
+  // map actionArguments to the expected format
+  if (args.actionArguments && Array.isArray(args.actionArguments)) {
+    data.actionArguments = args.actionArguments.map((arg: any) => ({
+      name: arg.name,
+      value: typeof arg.value === 'string' ? arg.value : String(arg.value)
+    }));
+  }
+
+  // map nodes if provided
+  if (args.nodes && Array.isArray(args.nodes)) {
+    data.nodes = args.nodes.map((node: any) => ({
+      properties: node.properties || [],
+      vmName: node.vmName
+    }));
+  }
+
+  // map SLA at the timeMachineInfo level
   if (args.slaId) {
     data.timeMachineInfo = data.timeMachineInfo || {};
     data.timeMachineInfo.slaId = args.slaId;
@@ -279,6 +398,14 @@ async function validateAndCollectMissingParams(args: any) {
     });
   }
 
+  if (!args.dbParameterProfileId) {
+    missing.push({
+      parameter: 'dbParameterProfileId',
+      description: 'Database parameter profile ID required for database configuration',
+      type: 'required'
+    });
+  }
+
   if (!args.nxClusterId) {
     missing.push({
       parameter: 'nxClusterId',
@@ -287,7 +414,7 @@ async function validateAndCollectMissingParams(args: any) {
     });
   }
 
-  // Vérifier les paramètres spécifiques au moteur
+  // check specific parameters based on database type
   const engineInputs = await ndbClient.get(`/app_types/${args.databaseType}/provision/input-file`, { 
     category: 'db_server;database' 
   });
@@ -362,6 +489,19 @@ async function generateSuggestions(args: any, missingParams: any[]) {
             description: p.description
           }));
           break;
+
+        case 'dbParameterProfileId':
+          const dbParamProfiles = await ndbClient.get('/profiles', { 
+            engine: args.databaseType,
+            type: 'Database_Parameter' 
+          });
+          suggestions.dbParameterProfiles = dbParamProfiles.map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            description: p.description,
+            engineType: p.engineType
+          }));
+          break;
       }
     } catch (error) {
       console.warn(`Failed to fetch suggestions for ${param.parameter}:`, error);
@@ -412,16 +552,116 @@ async function handleDeregisterDatabase(args: any) {
   return await ndbClient.delete(`/databases/${args.databaseId}`, data);
 }
 
+///////////////////////////////////
+
+
+//////////////////////////////////////
 // Database Server Management Handlers
+//////////////////////////////////////
 async function handleListDbservers(args: any) {
-  const params = {
-    'value-type': args.valueType,
-    value: args.value,
+  // Only pass load-databases and load-clones to the API
+  const params: any = {
     'load-databases': args.loadDatabases,
-    'load-clones': args.loadClones,
-    detailed: args.detailed
+    'load-clones': args.loadClones
   };
-  return await ndbClient.get('/dbservers', params);
+  const fullList = await ndbClient.get('/dbservers', params);
+
+  let filtered = fullList;
+  // Advanced filtering for dbserver and nested databases array
+  if (Array.isArray(filtered) && args.valueType && args.value) {
+    const keys = args.valueType.split(',').map((k: string) => k.trim());
+    const values = args.value.split(',').map((v: string) => v.trim());
+    filtered = filtered.filter((srv: any) =>
+      keys.every((key: string, idx: number) => {
+        const val = values[idx];
+        // Nested filter for databases.*
+        if (key.startsWith('databases.')) {
+          const dbKey = key.split('.').slice(1).join('.');
+          if (!Array.isArray(srv.databases)) return false;
+          // If filter is on databases.length
+          if (dbKey === '' || dbKey === 'length') {
+            const count = srv.databases.length;
+            if (val.startsWith('>=')) return count >= Number(val.substring(2));
+            if (val.startsWith('<=')) return count <= Number(val.substring(2));
+            if (val.startsWith('>')) return count > Number(val.substring(1));
+            if (val.startsWith('<')) return count < Number(val.substring(1));
+            if (val.startsWith('=')) return count === Number(val.substring(1));
+            return count === Number(val);
+          }
+          // Otherwise, filter on a property of at least one database
+          return srv.databases.some((db: any) => {
+            if (val.startsWith('!')) return String(db[dbKey]) !== val.substring(1);
+            if (val.startsWith('>=')) return db[dbKey] >= val.substring(2);
+            if (val.startsWith('<=')) return db[dbKey] <= val.substring(2);
+            if (val.startsWith('>')) return db[dbKey] > val.substring(1);
+            if (val.startsWith('<')) return db[dbKey] < val.substring(1);
+            if (val.startsWith('*') && val.endsWith('*')) {
+              const search = val.slice(1, -1).toLowerCase();
+              return String(db[dbKey]).toLowerCase().includes(search);
+            }
+            return String(db[dbKey]) === val;
+          });
+        } else {
+          // Standard dbserver property
+          const srvVal = srv[key];
+          if (val.startsWith('!')) return String(srvVal) !== val.substring(1);
+          if (val.startsWith('>=')) return srvVal >= val.substring(2);
+          if (val.startsWith('<=')) return srvVal <= val.substring(2);
+          if (val.startsWith('>')) return srvVal > val.substring(1);
+          if (val.startsWith('<')) return srvVal < val.substring(1);
+          if (val.startsWith('*') && val.endsWith('*')) {
+            const search = val.slice(1, -1).toLowerCase();
+            return String(srvVal).toLowerCase().includes(search);
+          }
+          return String(srvVal) === val;
+        }
+      })
+    );
+  }
+
+  // Map to main properties, remove databases/clones if not loaded
+  return filtered.map((srv: any) => {
+    const mapped: any = {
+      id: srv.id,
+      eraCreated: srv.eraCreated,
+      dbserverClusterId: srv.dbserverClusterId,
+      name: srv.name,
+      description: srv.description,
+      ipAddresses: srv.ipAddresses,
+      fqdns: srv.fqdns,
+      type: srv.type,
+      status: srv.status,
+      nxClusterId: srv.nxClusterId,
+      databaseType: srv.databaseType,
+      eraVersion: srv.eraVersion,
+      ownerId: srv.ownerId,
+      dateCreated: srv.dateCreated,
+      dateModified: srv.dateModified
+    };
+    if (args.loadDatabases !== false || args.loadClones !== false) {
+      mapped.databases = Array.isArray(srv.databases)
+        ? srv.databases.map((db: any) => ({
+            id: db.id,
+            name: db.name,
+            description: db.description,
+            ownerId: db.ownerId,
+            dateCreated: db.dateCreated,
+            dateModified: db.dateModified,
+            clustered: db.clustered,
+            clone: db.clone,
+            databaseName: db.databaseName,
+            type: db.type,
+            status: db.status,
+            dbserverLogicalClusterId: db.dbserverLogicalClusterId,
+            timeMachineId: db.timeMachineId,
+            parentTimeMachineId: db.parentTimeMachineId,
+            timeZone: db.timeZone
+          }))
+        : [];
+    }
+   
+    return mapped;
+  });
 }
 
 async function handleGetDbserver(args: any) {
@@ -445,14 +685,63 @@ async function handleRegisterDbserver(args: any) {
   return await ndbClient.post('/dbservers/register', data);
 }
 
+///////////////////////////////////
 // Clone Management Handlers
+///////////////////////////////////
 async function handleListClones(args: any) {
-  const params = {
-    'value-type': args.valueType,
-    value: args.value,
-    detailed: args.detailed
-  };
-  return await ndbClient.get('/clones', params);
+  // Get all clones from NDB
+  const allClones = await ndbClient.get('/clones', null);
+
+  let filtered = allClones;
+  // Enhanced filtering: supports !, >, <, >=, <=, *partial*, and exact match
+  if (Array.isArray(filtered) && args.valueType && args.value) {
+    const keys = args.valueType.split(',').map((k: string) => k.trim());
+    const values = args.value.split(',').map((v: string) => v.trim());
+    filtered = filtered.filter((clone: any) =>
+      keys.every((key: string, idx: number) => {
+        const val = values[idx];
+        const cloneVal = clone[key];
+        if (val.startsWith('!')) {
+          // Negative match
+          return String(cloneVal) !== val.substring(1);
+        } else if (val.startsWith('>=')) {
+          return cloneVal >= val.substring(2);
+        } else if (val.startsWith('<=')) {
+          return cloneVal <= val.substring(2);
+        } else if (val.startsWith('>')) {
+          return cloneVal > val.substring(1);
+        } else if (val.startsWith('<')) {
+          return cloneVal < val.substring(1);
+        } else if (val.startsWith('*') && val.endsWith('*')) {
+          // Partial match (case-insensitive)
+          const search = val.slice(1, -1).toLowerCase();
+          return String(cloneVal).toLowerCase().includes(search);
+        } else {
+          // Exact match
+          return String(cloneVal) === val;
+        }
+      })
+    );
+  }
+  // Only keep the main properties as per the required schema
+  if (Array.isArray(filtered)) {
+    filtered = filtered.map((clone: any) => ({
+      id: clone.id,
+      name: clone.name,
+      description: clone.description,
+      ownerId: clone.ownerId,
+      dateCreated: clone.dateCreated,
+      dateModified: clone.dateModified,
+      databaseName: clone.databaseName,
+      type: clone.type,
+      status: clone.status,
+      dbserverLogicalClusterId: clone.dbserverLogicalClusterId,
+      timeMachineId: clone.timeMachineId,
+      parentTimeMachineId: clone.parentTimeMachineId,
+      timeZone: clone.timeZone
+    }));
+  }
+  return filtered;
 }
 
 async function handleGetClone(args: any) {
@@ -493,6 +782,10 @@ async function handleDeleteClone(args: any) {
   };
   return await ndbClient.delete(`/clones/${args.cloneId}`, data);
 }
+
+///////////////////////////////////
+//   End of Clone tools section  //
+///////////////////////////////////
 
 // Time Machine Management Handlers
 async function handleListTimeMachines(args: any) {
@@ -584,6 +877,13 @@ async function handleGetCluster(args: any) {
   return await ndbClient.get(`/clusters/${args.clusterId}`);
 }
 
+async function handleGetClusterByName(args: any) {
+  if (!args.clusterName) {
+    throw new Error('clusterName is required');
+  }
+  return await ndbClient.get(`/clusters/name/${encodeURIComponent(args.clusterName)}`);
+}
+
 async function handleListProfiles(args: any) {
   const params = {
     engine: args.engine,
@@ -658,6 +958,49 @@ async function handleListAlerts(args: any) {
 
 async function handleGetAlert(args: any) {
   return await ndbClient.get(`/alerts/${args.alertId}`);
+}
+
+// List all NDB users with filtering on scalar properties using valueType/value
+async function handleListUsers(args: any) {
+  // Only pass supported params to the NDB API
+  const users = await ndbClient.get('/users');
+  let filtered = users;
+  // Apply filtering using valueType and value on the result JSON
+  if (Array.isArray(filtered) && args.valueType && args.value) {
+    const keys = args.valueType.split(',').map((k: string) => k.trim());
+    const values = args.value.split(',').map((v: string) => v.trim());
+    filtered = filtered.filter((user: any) =>
+      keys.every((key: string, idx: number) => {
+        // Accept both top-level and nested keys
+        // For roles (array), do an exact match
+        if (key === 'roles' && Array.isArray(user[key])) {
+          return JSON.stringify(user[key]) === JSON.stringify(values[idx]);
+        }
+        // For booleans, allow string 'true'/'false' to match boolean values
+        if (typeof user[key] === 'boolean') {
+          return String(user[key]) === values[idx];
+        }
+        return user[key] == values[idx];
+      })
+    );
+  }
+  // Only keep the main properties as per the required schema
+  if (Array.isArray(filtered)) {
+    filtered = filtered.map((user: any) => ({
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      isExternalAuth: user.isExternalAuth,
+      passwordExpired: user.passwordExpired,
+      roles: user.roles
+    }));
+  }
+  return filtered;
+}
+
+// Get full details for a single user by userId
+async function handleGetUser(args: any) {
+  return await ndbClient.get(`/users/${args.userId}`);
 }
 
 // Start the server

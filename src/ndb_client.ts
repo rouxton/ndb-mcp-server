@@ -69,6 +69,7 @@ export class NDBClient {
    */
   async get(endpoint: string, params?: any): Promise<any> {
     const response = await this.client.get(endpoint, { params });
+    //console.log('GET', endpoint, params, response.request);
     return response.data;
   }
 

@@ -74,22 +74,26 @@ export interface DatabaseGetParams {
 }
 
 export interface ProvisionDatabaseRequest {
-  databaseType: DatabaseEngine;
+  databaseType: string;
   name: string;
+  databaseDescription?: string;
   softwareProfileId: string;
-  softwareProfileVersionId?: string;
+  softwareProfileVersionId: string;
   computeProfileId: string;
   networkProfileId: string;
-  dbParameterProfileId?: string;
-  newDbServerTimeZone?: string;
-  timeMachineInfo?: TimeMachineInfo;
-  actionArguments?: ActionArgument[];
-  createDbserver?: boolean;
-  nodeCount?: number;
+  dbParameterProfileId: string;
+  newDbServerTimeZone: string;
+  timeMachineInfo: TimeMachineInfo;
+  actionArguments: ActionArgument[];
+  createDbserver: boolean;
+  nodeCount: number;
   nxClusterId: string;
-  sshPublicKey?: string;
-  clustered?: boolean;
-  nodes?: Node[];
+  sshPublicKey: string;
+  clustered: boolean;
+  nodes: DatabaseNode[];
+  autoTuneStagingDrive?: boolean;
+  slaId?: string;
+  skipValidation?: boolean;
 }
 
 export interface RegisterDatabaseRequest {
@@ -105,10 +109,10 @@ export interface RegisterDatabaseRequest {
   vmDescription?: string;
   autoTuneStagingDrive?: boolean;
   workingDirectory?: string;
-  timeMachineInfo?: TimeMachineInfo;
+  timeMachineInfo: TimeMachineInfo;
   tags?: Tag[];
   nxClusterId: string;
-  actionArguments?: ActionArgument[];
+  actionArguments: ActionArgument[];
 }
 
 export interface UpdateDatabaseRequest {
@@ -191,14 +195,19 @@ export interface Node {
   properties?: ActionArgument[];
 }
 
+export interface DatabaseNode {
+  vmName: string;
+  properties: any[];
+}
+
 // Clone interfaces
 export interface CreateCloneRequest {
   name: string;
   description?: string;
-  createDbserver?: boolean;
-  clustered?: boolean;
-  nxClusterId?: string;
-  sshPublicKey?: string;
+  createDbserver: boolean;
+  clustered: boolean;
+  nxClusterId: string;
+  sshPublicKey: string;
   dbserverId?: string;
   dbserverClusterId?: string;
   dbserverLogicalClusterId?: string;
@@ -208,10 +217,10 @@ export interface CreateCloneRequest {
   newDbServerTimeZone?: string;
   timeZone?: string;
   latestSnapshot?: boolean;
-  nodeCount?: number;
-  nodes?: Node[];
+  nodeCount: number;
+  nodes: Node[];
   tags?: Tag[];
-  actionArguments?: ActionArgument[];
+  actionArguments: ActionArgument[];
   computeProfileId?: string;
   networkProfileId?: string;
   databaseParameterProfileId?: string;
@@ -244,7 +253,7 @@ export interface RegisterDBServerRequest {
   databaseType: DatabaseEngine;
   username: string;
   password: string;
-  actionArguments?: ActionArgument[];
+  actionArguments: ActionArgument[];
 }
 
 export interface UpdateDBServerRequest {

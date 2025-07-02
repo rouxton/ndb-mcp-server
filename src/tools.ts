@@ -6,30 +6,51 @@ export const tools = [
   // Database Management
   {
     name: 'list_databases',
-    description: 'Get all registered and provisioned databases',
+    description: `Get all registered and provisioned databases. Filtering is done using valueType and value fields, which are used to filter the response sent by the NDB API, for flexible filtering.
+    You can filter by any of the following attribute names available in the database object:
+    - name: name of the database, string
+    - description: description of the database, string
+    - ownerId: Id of the user, as any other Id, it needs to be reconciled with the username using the list_users tool
+    - dateCreated: date when the database was created
+    - dateModified: date when database was last modified
+    - clustered: if the database is clustered, boolean    
+    - eraCreated: if the database has been created through NDB (greenfield) or attached (brownfield), boolean
+    - databaseName: same as name, string
+    - type: type of the database engine (postgres_database, oracle_database, etc.)
+    - status: current status of the database (e.g. "READY" when it's operational, "ERA_DAEMON_UNREACHABLE" when the agent is not reachable (and then the database is not managed by NDB), etc.)
+    - dbserverLogicalClusterId: ID of the logical cluster the database is running on, can be reconciled with list_dbservers or get_dbserver tools
+    - timeMachineId: ID of the time machine associated with the database, can be reconciled with list_time_machines or get_time_machine tools
+    - timeZone: time zone of the database
+
+    Examples:
+    - To filter by database type: valueType = "type", value = "postgres_database"
+    - To filter by type and owner: valueType = "type,ownerId", value = "postgres_database,12345"
+    - To filter by status not READY: valueType = "status", value = "!READY"
+    - To filter by creation date after June 1st, 2025: valueType = "dateCreated", value = ">2025-06-01"
+    
+    Hints:
+    - list_databases doesn't not return details about the dbserver and thus the underlying cluster. If a query ask specifically to get database information on a specific cluster, use list_dbservers with loadDatabases set to true, and use additional filters if necessary.
+    - You can combine any number of attributes in valueType and value to filter the results. Always try to use the most specific attributes first to reduce the result set.
+    - You can use operators in value for advanced filtering: !value for negation, >value or <value for comparisons, and *value* for partial (substring) search.
+    - ** Always use available filters ** to reduce the result set, as the NDB API can return a large number of databases, especially in large environments. This will help you find the specific database you are looking for quickly.
+    - You can combine multiple filters in the same query to narrow down the results, such as filtering by type and status at the same time.
+    
+
+    `,
     inputSchema: {
       type: 'object',
       properties: {
         valueType: {
           type: 'string',
-          description: 'Filter type: id, name, database-name',
-          enum: ['id', 'name', 'database-name']
+          description: 'Comma-separated list of attribute names to filter on (e.g. "databaseType", "databaseType,ownerId")',
         },
         value: {
           type: 'string',
-          description: 'Filter value corresponding to valueType'
+          description: 'Comma-separated list of values corresponding to valueType (e.g. "postgres_database", "postgres_database,12345")',
         },
-        detailed: {
-          type: 'boolean',
-          description: 'Load entities with entire details',
-          default: false
-        },
-        loadDbserverCluster: {
-          type: 'boolean',
-          description: 'Load cluster info',
-          default: false
-        }
-      }
+
+      },
+      required: []
     }
   },
   {
@@ -90,9 +111,17 @@ export const tools = [
           description: 'Database instance name'
         },
         // Paramètres optionnels - seront proposés automatiquement si non fournis
+        databaseDescription: {
+          type: 'string',
+          description: 'Database description (optional)'
+        },
         softwareProfileId: {
           type: 'string',
           description: 'Software profile ID (will be suggested if not provided)'
+        },
+        softwareProfileVersionId: {
+          type: 'string', 
+          description: 'Software profile version ID (will be suggested if not provided)'
         },
         computeProfileId: {
           type: 'string',
@@ -102,9 +131,55 @@ export const tools = [
           type: 'string',
           description: 'Network profile ID (will be suggested if not provided)'
         },
+        dbParameterProfileId: {
+          type: 'string',
+          description: 'Database parameter profile ID (will be suggested if not provided)'
+        },
         nxClusterId: {
           type: 'string',
           description: 'Nutanix cluster ID (will be suggested if not provided)'
+        },
+        newDbServerTimeZone: {
+          type: 'string',
+          description: 'Database server time zone (optional)'
+        },
+        createDbserver: {
+          type: 'boolean',
+          description: 'Create new database server for database',
+          default: true
+        },
+        nodeCount: {
+          type: 'integer',
+          description: 'Number of nodes for clustered deployment',
+          default: 1
+        },
+        clustered: {
+          type: 'boolean',  
+          description: 'Whether to create a clustered database',
+          default: false
+        },
+        sshPublicKey: {
+          type: 'string',
+          description: 'SSH public key for server access (optional)'
+        },
+        autoTuneStagingDrive: {
+          type: 'boolean',
+          description: 'Auto-tune staging drive (optional)',
+          default: false
+        },
+        nodes: {
+          type: 'array',
+          description: 'Node configuration for multi-node deployments (optional)',
+          items: {
+            type: 'object',
+            properties: {
+              vmName: { type: 'string' },
+              properties: { 
+                type: 'array',
+                items: { type: 'object' }
+              }
+            }
+          }
         },
         slaId: {
           type: 'string',
@@ -238,18 +313,51 @@ export const tools = [
   // Database Server Management
   {
     name: 'list_dbservers',
-    description: 'Get list of all database servers',
+    description: `Get all database servers. You can include information about databases and/or clones hosted on the db server by using the loadDatabases or loadClones parameters.
+    Filtering is done using valueType and value fields, which are used to filter the response sent by the NDB API, for flexible filtering.
+    You can filter by any of the following attribute names available in the dbserver object:
+    - id: dbserver id, string
+    - name: name of the dbserver, string
+    - description: description of the dbserver, string
+    - ipAddresses: array of IP addresses, string (partial match supported)
+    - fqdns: array of FQDNs, string (partial match supported)
+    - type: type of the dbserver, string
+    - status: current status of the dbserver (e.g. "READY", etc.)
+    - nxClusterId: Nutanix cluster ID, string
+    - databaseType: type of the database engine (postgres_database, oracle_database, etc.)
+    - dbserverClusterId: ID of the logical cluster
+    - databases: number of databases (use valueType = "databases" and value = ">0" for dbservers with at least one database)
+    - databases.<property>: filter on a property of at least one database (e.g. databases.status, etc.)
+
+    Examples:
+    - To filter by dbserver engine type: valueType = "type", value = "postgres_database"
+    - To filter by status not READY: valueType = "status", value = "!READY"
+    - To filter by name containing 'prod': valueType = "name", value = "*prod*"
+    - To get dbservers with at least one database: valueType = "databases", value = ">0"
+    - To get dbservers with exactly one database: valueType = "databases", value = "=1"
+    - To get dbservers with at least one database in status READY: valueType = "databases.status", value = "READY"
+    
+    Hints:
+    - You can combine any number of attributes in valueType and value to filter the results. Always try to use the most specific attributes first to reduce the result set.
+    - You can use operators in value for advanced filtering: !value for negation, >value or <value for comparisons, and *value* for partial (substring) search.
+    - Set loadDatabases or loadClones to false to avoid loading and returning the associated databases or clones arrays in the result.
+    - Use list_dbservers with loadDatabases set to true if the request asks for databases on a specific cluster. list_databases does not provide information about the dbserver, only the databases themselves.
+    - For advanced filtering on nested databases, use valueType like "databases.status" and the corresponding value.
+    - ** Always use available filters ** to reduce the result set, as the NDB API can return a large number of databases, especially in large environments. This will help you find the specific database you are looking for quickly.
+    - You can combine multiple filters in the same query to narrow down the results, such as filtering by type and status at the same time.
+        
+
+    `,
     inputSchema: {
       type: 'object',
       properties: {
         valueType: {
           type: 'string',
-          description: 'Filter type',
-          enum: ['ip', 'name', 'vm-cluster-name', 'vm-cluster-uuid', 'dbserver-cluster-id', 'nx-cluster-id', 'fqdn']
+          description: 'Comma-separated list of attribute names to filter on (e.g. "type", "type,status")',
         },
         value: {
           type: 'string',
-          description: 'Filter value corresponding to valueType'
+          description: 'Comma-separated list of values corresponding to valueType (e.g. "postgres_engine", "postgres_engine,!READY")',
         },
         loadDatabases: {
           type: 'boolean',
@@ -260,13 +368,9 @@ export const tools = [
           type: 'boolean',
           description: 'Load associated clones',
           default: false
-        },
-        detailed: {
-          type: 'boolean',
-          description: 'Load entities with entire details',
-          default: false
         }
-      }
+      },
+      required: []
     }
   },
   {
@@ -344,25 +448,47 @@ export const tools = [
   // Clone Management
   {
     name: 'list_clones',
-    description: 'Get list of all database clones',
+    description: `Get all database clones. Filtering is done using valueType and value fields, which are used to filter the response sent by the NDB API, for flexible filtering.
+    You can filter by any of the following attribute names available in the clone object:
+    - id: clone id, string
+    - name: name of the clone, string
+    - description: description of the clone, string
+    - ownerId: Id of the user who created the clone, string
+    - dateCreated: date when the clone was created
+    - dateModified: date when the clone was last modified
+    - databaseName: name of the source database, string
+    - type: type of the database engine (postgres_engine, oracle_engine, etc.)
+    - status: current status of the clone (e.g. "READY", etc.)
+    - dbserverLogicalClusterId: ID of the logical cluster the clone is running on
+    - timeMachineId: ID of the time machine associated with the clone
+    - parentTimeMachineId: ID of the parent time machine (the time machine the clone was created from)
+    - timeZone: time zone of the clone
+
+    Examples:
+    - To filter by clone type: valueType = "type", value = "postgres_database"
+    - To filter by type and owner: valueType = "type,ownerId", value = "postgres_database,12345"
+    - To filter by status not READY: valueType = "status", value = "!READY"
+    - To filter by creation date after June 1st, 2025: valueType = "dateCreated", value = ">2025-06-01"
+    
+    Hints:
+    - You can combine any number of attributes in valueType and value to filter the results. Always try to use the most specific attributes first to reduce the result set.
+    - You can use operators in value for advanced filtering: !value for negation, >value or <value for comparisons, and *value* for partial (substring) search.
+    
+
+    `,
     inputSchema: {
       type: 'object',
       properties: {
         valueType: {
           type: 'string',
-          description: 'Filter type',
-          enum: ['id', 'name', 'database-name']
+          description: 'Comma-separated list of attribute names to filter on (e.g. "type", "type,ownerId")',
         },
         value: {
           type: 'string',
-          description: 'Filter value'
+          description: 'Comma-separated list of values corresponding to valueType (e.g. "postgres_database", "postgres_database,12345")',
         },
-        detailed: {
-          type: 'boolean',
-          description: 'Load entities with entire details',
-          default: false
-        }
-      }
+      },
+      required: []
     }
   },
   {
@@ -731,6 +857,17 @@ export const tools = [
       required: ['clusterId']
     }
   },
+  {
+    name: 'get_cluster_by_name',
+    description: 'Get cluster details by name',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        clusterName: { type: 'string', description: 'Cluster name' }
+      },
+      required: ['clusterName']
+    }
+  },
 
   // Profile Management
   {
@@ -887,6 +1024,52 @@ export const tools = [
         }
       },
       required: ['alertId']
+    }
+  },
+
+  // User Management
+  {
+    name: 'list_users',
+    description: `Get all NDB users. Filtering is done using valueType and value fields, which are used to filter the response sent by the NDB API, for flexible filtering.
+    
+    You can filter by any of the following attribute names available in the user object:
+    - username: user login, string
+    - email: user email, string
+    - isExternalAuth: true if user is authenticated on an external directory (Active Directory), boolean
+    - passwordExpired: true if password is expired, boolean
+    
+    Examples:
+    - To filter by username: valueType = "username", value = "admin"
+    - To filter by isExternalAuth: valueType = "isExternalAuth", value = "true"
+    - To filter by username and passwordExpired: valueType = "username,passwordExpired", value = "admin,true"
+`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        valueType: {
+          type: 'string',
+          description: 'Comma-separated list of attribute names to filter on (e.g. "username", "username,isExternalAuth")',
+        },
+        value: {
+          type: 'string',
+          description: 'Comma-separated list of values corresponding to valueType (e.g. "admin", "admin,true")',
+        }
+      },
+      required: []
+    }
+  },
+  {
+    name: 'get_user',
+    description: 'Get user details by user ID',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        userId: {
+          type: 'string',
+          description: 'User ID'
+        }
+      },
+      required: ['userId']
     }
   }
 ];
