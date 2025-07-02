@@ -29,7 +29,7 @@ import type { ToolCallArgs } from './types.js';
 const server = new Server(
   {
     name: 'ndb-mcp-server',
-    version: '1.0.0',
+    version: '1.1.0',
     description: `NDB MCP Server for managing Nutanix Database Service (NDB). It provides mutliples tools to manage databases, clones, snapshots, and infrastructure through natural language commands.
     
     Hints:
