@@ -1,27 +1,73 @@
 #!/usr/bin/env node
 
-const fs = require('fs');
-const readline = require('readline');
-const https = require('https');
-const http = require('http');
-const url = require('url');
-const path = require('path');
+import fs from 'fs';
+import readline from 'readline';
+import https from 'https';
+import http from 'http';
+import url from 'url';
+import path from 'path';
+import { stdin as input, stdout as output } from 'process';
+import readlineSync from 'readline-sync';
 
-const ENV_PATH = path.resolve(process.cwd(), '.env');
-
-function ask(question, defaultValue) {
+function ask(question, defaultValue, { mask = false } = {}) {
   return new Promise((resolve) => {
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    rl.question(`${question}${defaultValue ? ` [${defaultValue}]` : ''}: `, (answer) => {
-      rl.close();
-      resolve(answer || defaultValue);
-    });
+    if (!mask) {
+      const rl = readline.createInterface({ input, output });
+      rl.question(`${question}${defaultValue ? ` [${defaultValue}]` : ''}: `, (answer) => {
+        rl.close();
+        resolve(answer || defaultValue);
+      });
+    } else {
+      // Masked input for password (no echo, only asterisks)
+      const rl = readline.createInterface({ input, output });
+      const prompt = `${question}: `;
+      process.stdout.write(prompt);
+      const wasRaw = process.stdin.isRaw;
+      process.stdin.setRawMode(true);
+      let value = '';
+      process.stdin.resume();
+      process.stdin.on('data', onData);
+      function onData(char) {
+        char = char + '';
+        switch (char) {
+          case '\n':
+          case '\r':
+          case '\u0004':
+            process.stdin.setRawMode(wasRaw);
+            process.stdin.pause();
+            process.stdin.removeListener('data', onData);
+            rl.close();
+            process.stdout.write('\n');
+            resolve(value);
+            break;
+          case '\u0003': // Ctrl+C
+            process.stdin.setRawMode(wasRaw);
+            process.stdin.pause();
+            process.stdin.removeListener('data', onData);
+            rl.close();
+            process.exit();
+            break;
+          case '\u007f': // Backspace
+            if (value.length > 0) {
+              value = value.slice(0, -1);
+              process.stdout.clearLine(0);
+              process.stdout.cursorTo(prompt.length);
+              process.stdout.write('*'.repeat(value.length));
+            }
+            break;
+          default:
+            value += char;
+            process.stdout.write('*');
+            break;
+        }
+      }
+    }
   });
 }
 
-function readEnv() {
-  if (!fs.existsSync(ENV_PATH)) return {};
-  const lines = fs.readFileSync(ENV_PATH, 'utf-8').split('\n');
+function readEnv(envPath) {
+  if (!fs.existsSync(envPath)) return {};
+  const lines = fs.readFileSync(envPath, 'utf-8').split('\n');
   const env = {};
   for (const line of lines) {
     if (line.trim() && !line.startsWith('#')) {
@@ -68,17 +114,22 @@ async function getToken(baseUrl, username, password, expire, verifySSL) {
 }
 
 async function main() {
-  const current = readEnv();
+  // Ask for environment name
+  const envName = await ask('Environment name (leave empty for default)', '');
+  const envFile = envName ? `.env.${envName}` : '.env';
+  const ENV_PATH = path.resolve(process.cwd(), envFile);
+
+  // Use the rest of the logic as before, but with ENV_PATH
+  const current = readEnv(ENV_PATH);
   console.log('--- NDB MCP Server Configuration ---');
   const baseUrl = await ask('NDB Base URL (e.g. https://ndb.example.com:443)', current.NDB_BASE_URL);
   const verifySSL = (await ask('Verify SSL certificate? (yes/no)', current.NDB_VERIFY_SSL === 'false' ? 'no' : 'yes')).toLowerCase() === 'yes';
   const authType = await ask('Authentication type (basic/token)', current.NDB_AUTH_TYPE || 'basic');
   const username = await ask('NDB Username', current.NDB_USERNAME);
-  const password = await ask('NDB Password', '');
+  const password = readlineSync.question('NDB Password: ', { hideEchoBack: true });
   let token = '';
-  let tokenExpire = '';
   if (authType === 'token') {
-    tokenExpire = await ask('Token expiration in hours', current.NDB_TOKEN_EXPIRE || '5');
+    const tokenExpire = await ask('Token expiration in minutes (-1 for unlimited)', '5');
     try {
       token = await getToken(baseUrl, username, password, tokenExpire, verifySSL);
       console.log('Token generated successfully.');
@@ -91,16 +142,13 @@ async function main() {
   const env = [
     `NDB_BASE_URL=${baseUrl}`,
     `NDB_VERIFY_SSL=${verifySSL}`,
-    `NDB_AUTH_TYPE=${authType}`,
-    `NDB_USERNAME=${username}`,
-    authType === 'token' ? `NDB_TOKEN=${token}` : '',
-    authType === 'token' ? `NDB_TOKEN_EXPIRE=${tokenExpire}` : '',
-    authType === 'basic' ? `NDB_PASSWORD=${password}` : ''
+    authType === 'token' ? `NDB_TOKEN=${token}` : `NDB_USERNAME=${username}`,
+    authType === 'token' ? '' : `NDB_PASSWORD=${password}`
   ].filter(Boolean).join('\n');
   fs.writeFileSync(ENV_PATH, env + '\n');
-  console.log(`.env file written to ${ENV_PATH}`);
+  console.log(`${envFile} file written to ${ENV_PATH}`);
 }
 
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
   main();
 }

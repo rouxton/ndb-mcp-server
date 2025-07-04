@@ -13,7 +13,8 @@
     "test:connection:debug": "node scripts/test-connection-debug.js",
     "test:mcp": "python3 scripts/test-mcp-client.py",
     "test:inspector": "npx @modelcontextprotocol/inspector node dist/index.js",
-    "test:all": "npm run test:connection && npm run test:mcp"
+    "test:all": "npm run test:connection && npm run test:mcp",
+    "configure": "node scripts/configure.js"
   },
   "keywords": [
     "mcp",
@@ -30,7 +31,8 @@
     "axios": "^1.6.0",
     "dotenv": "^16.0.0",
     "got": "^13.0.0",
-    "mcps-logger": "^1.0.0"
+    "mcps-logger": "^1.0.0",
+    "readline-sync": "^1.4.10"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

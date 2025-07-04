@@ -10,7 +10,7 @@
 
 // Load environment variables from .env file
 import 'dotenv/config';
-// import "mcps-logger/console";
+// import "mcps-logger/console"; // Uncomment if you want to use console logging
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -254,9 +254,10 @@ async function handleListDatabases(args: any) {
 }
 
 async function handleGetDatabase(args: any) {
-  const params = {
+  const params: any = {
     'value-type': args.valueType || 'id',
-    detailed: args.detailed
+    'detailed': args.detailed,
+    'load-dbserver-cluster': args.loadDbserverCluster
   };
   return await ndbClient.get(`/databases/${args.databaseId}`, params);
 }

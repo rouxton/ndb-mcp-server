@@ -181,6 +181,16 @@ NDB_VERIFY_SSL=false
 - 🔒 **Enhanced security** (no local .env file)
 - 👥 **Multi-user machines**
 
+## Authentication Setup
+
+The NDB MCP Server supports both basic and token-based authentication. Use the interactive configuration tool to generate your `.env` file and obtain a token if needed:
+
+```bash
+npm run configure
+```
+
+See [docs/authentication.md](./authentication.md) for details and security notes.
+
 ## Configuration Options
 
 | Variable | Required | Description | Default | Example |

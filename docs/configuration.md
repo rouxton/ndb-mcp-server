@@ -1,56 +1,78 @@
 # Configuration Guide
 
-This guide covers advanced configuration options for the NDB MCP Server, including environment-specific setups, security configurations, and optimization settings.
+This guide explains how to configure the NDB MCP Server for Claude and other LLMs, including initial setup, multi-environment management, security best practices, and advanced optimizations.
 
-## Table of Contents
+## 1. Initial Configuration
 
-- [Configuration Methods Overview](#configuration-methods-overview)
-- [Environment-Specific Configurations](#environment-specific-configurations)
-- [Advanced Claude Desktop Configuration](#advanced-claude-desktop-configuration)
-- [Development Configuration](#development-configuration)
-- [Security Configuration](#security-configuration)
-- [Performance Optimization](#performance-optimization)
-- [Multi-Environment Setup](#multi-environment-setup)
-- [Troubleshooting Configuration](#troubleshooting-configuration)
+To quickly set up your environment, use the interactive configuration script:
 
-## Configuration Methods Overview
+```bash
+npm run configure
+```
 
-### Method 1: Claude Desktop Configuration (Production)
+This script will prompt you for all required fields (NDB URL, authentication, SSL, etc.) and generate a `.env` file in your project root. This `.env` file can be used directly by Claude Desktop or any LLM that supports environment variable configuration.
 
-**Best for:**
-- 🎯 Regular usage with Claude Desktop
-- 🏢 Production environments
-- 🔒 Enhanced security (no local files)
-- 👥 Multi-user machines
+**Authentication options:**
+- You will be asked to choose between two authentication methods:
+  - **Basic authentication** (username and password)
+  - **Token-based authentication** (recommended for production)
+- If you choose token-based authentication, the script will prompt you for your username and password only to generate the token, then save the resulting token as `NDB_TOKEN` in your `.env` file. Your username and password will not be stored. If you choose basic authentication, your username and password will be saved in the `.env` file.
 
-**Configuration Location:**
-- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
-- **Linux**: `~/.config/Claude/claude_desktop_config.json`
+**Example `.env` file with basic authentication:**
+```env
+NDB_BASE_URL=https://ndb-dev.company.local
+NDB_USERNAME=dev-admin
+NDB_PASSWORD=dev-password
+NDB_VERIFY_SSL=false
+NDB_TIMEOUT=60000
+```
 
-### Method 2: Local .env File (Development)
+**Example `.env` file with token authentication:**
+```env
+NDB_BASE_URL=https://ndb.company.com
+NDB_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+NDB_VERIFY_SSL=true
+NDB_TIMEOUT=30000
+```
 
-**Best for:**
-- 🛠️ Development and debugging
-- 🧪 Running tests and diagnostics
-- 🔄 Frequent configuration changes
-- 🔧 Manual server operations
+You can then reference these variables in your Claude Desktop configuration or other LLM integrations.
 
-**Configuration Location:**
-- Project root: `ndb-mcp-server/.env`
+## 2. Multi-Environment Configuration
 
-### Priority Order
+The configuration script also supports multiple environments. When prompted, specify an environment name (e.g., `prod`, `staging`, `dev`). The script will create or update a corresponding `.env.<env>` file (e.g., `.env.prod`). If you leave the environment blank, it will use `.env` by default.
 
-The server reads configuration in this order:
-1. **Environment variables** (set by Claude Desktop or system)
-2. **Local .env file** (if present and development mode)
-3. **Default values** (hardcoded fallbacks)
+**Example usage:**
+```bash
+npm run configure
+# When prompted: Environment to configure?  prod
+# => creates/updates .env.prod
+```
 
-## Environment-Specific Configurations
+**Switching environments for testing:**
+When running the connection test or other scripts, you will be prompted for the environment to use. The script will load the correct `.env.<env>` file.
 
-### Development Environment
+**Example: Development with login/password, Production with token**
 
-**Claude Desktop Configuration:**
+- `.env.dev`:
+  ```env
+  NDB_BASE_URL=https://ndb-dev.company.local
+  NDB_USERNAME=dev-user
+  NDB_PASSWORD=dev-password
+  NDB_VERIFY_SSL=false
+  NDB_TIMEOUT=60000
+  ```
+- `.env.prod`:
+  ```env
+  NDB_BASE_URL=https://ndb.company.com
+  NDB_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+  NDB_VERIFY_SSL=true
+  NDB_TIMEOUT=30000
+  ```
+
+**Claude Desktop multi-environment example:**
+
+You can simply copy the values from your generated `.env` files into the corresponding `env` sections of your `claude_desktop_config.json`. This allows you to keep your environment-specific settings consistent between your CLI tools and Claude Desktop.
+
 ```json
 {
   "mcpServers": {
@@ -59,526 +81,65 @@ The server reads configuration in this order:
       "args": ["/Users/developer/ndb-mcp-server/dist/index.js"],
       "env": {
         "NDB_BASE_URL": "https://ndb-dev.company.local",
-        "NDB_USERNAME": "dev-admin",
+        "NDB_USERNAME": "dev-user",
         "NDB_PASSWORD": "dev-password",
-        "NDB_VERIFY_SSL": "false",
-        "NDB_TIMEOUT": "60000"
+        "NDB_VERIFY_SSL": "false"
       }
-    }
-  }
-}
-```
-
-**Or .env file:**
-```bash
-# Development Environment
-NDB_BASE_URL=https://ndb-dev.company.local
-NDB_USERNAME=dev-admin
-NDB_PASSWORD=dev-password
-NDB_VERIFY_SSL=false
-NDB_TIMEOUT=60000
-
-# Development-specific settings
-NODE_ENV=development
-DEBUG=true
-```
-
-### Staging Environment
-
-```json
-{
-  "mcpServers": {
-    "ndb-staging": {
-      "command": "node",
-      "args": ["/opt/ndb-mcp-server/dist/index.js"],
-      "env": {
-        "NDB_BASE_URL": "https://ndb-staging.company.com",
-        "NDB_USERNAME": "staging-service",
-        "NDB_PASSWORD": "staging-secure-password",
-        "NDB_VERIFY_SSL": "true",
-        "NDB_TIMEOUT": "45000"
-      }
-    }
-  }
-}
-```
-
-### Production Environment
-
-```json
-{
-  "mcpServers": {
-    "ndb": {
-      "command": "node",
-      "args": ["/opt/ndb-mcp-server/dist/index.js"],
-      "env": {
-        "NDB_BASE_URL": "https://ndb.company.com",
-        "NDB_USERNAME": "automation-service",
-        "NDB_PASSWORD": "highly-secure-production-password",
-        "NDB_VERIFY_SSL": "true",
-        "NDB_TIMEOUT": "30000"
-      }
-    }
-  }
-}
-```
-
-## Advanced Claude Desktop Configuration
-
-### Multiple NDB Environments
-
-Configure multiple NDB servers for different environments:
-
-```json
-{
-  "mcpServers": {
+    },
     "ndb-prod": {
       "command": "node",
       "args": ["/opt/ndb-mcp-server/dist/index.js"],
       "env": {
-        "NDB_BASE_URL": "https://ndb-prod.company.com",
-        "NDB_USERNAME": "prod-service",
-        "NDB_PASSWORD": "prod-password"
-      }
-    },
-    "ndb-dev": {
-      "command": "node", 
-      "args": ["/opt/ndb-mcp-server/dist/index.js"],
-      "env": {
-        "NDB_BASE_URL": "https://ndb-dev.company.com",
-        "NDB_USERNAME": "dev-service",
-        "NDB_PASSWORD": "dev-password",
-        "NDB_VERIFY_SSL": "false"
-      }
-    }
-  }
-}
-```
-
-### Custom Node.js Path
-
-For systems with multiple Node.js versions:
-
-```json
-{
-  "mcpServers": {
-    "ndb": {
-      "command": "/usr/local/bin/node",
-      "args": ["/opt/ndb-mcp-server/dist/index.js"],
-      "env": {
         "NDB_BASE_URL": "https://ndb.company.com",
-        "NDB_USERNAME": "service-account",
-        "NDB_PASSWORD": "service-password"
+        "NDB_TOKEN": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+        "NDB_VERIFY_SSL": "true"
       }
     }
   }
 }
 ```
 
-### Performance Tuning
+## 3. Advanced Optimizations
 
-```json
-{
-  "mcpServers": {
-    "ndb": {
-      "command": "node",
-      "args": [
-        "--max-old-space-size=2048",
-        "/opt/ndb-mcp-server/dist/index.js"
-      ],
-      "env": {
-        "NDB_BASE_URL": "https://ndb.company.com",
-        "NDB_USERNAME": "service-account", 
-        "NDB_PASSWORD": "service-password",
-        "NDB_TIMEOUT": "45000"
-      }
+- **Custom Node.js Path:**
+  Specify a custom Node.js binary if needed:
+  ```json
+  {
+    "command": "/usr/local/bin/node",
+    "args": ["/opt/ndb-mcp-server/dist/index.js"]
+  }
+  ```
+- **Performance Tuning:**
+  Increase memory or adjust timeouts for large environments:
+  ```json
+  {
+    "args": ["--max-old-space-size=4096", "/opt/ndb-mcp-server/dist/index.js"],
+    "env": { "NDB_TIMEOUT": "60000" }
+  }
+  ```
+- **Connection Pooling and Retries:**
+  ```json
+  {
+    "env": {
+      "NDB_MAX_RETRIES": "3",
+      "NDB_RETRY_DELAY": "1000",
+      "NDB_KEEP_ALIVE": "true"
     }
   }
-}
-```
+  ```
+
+## 4. Security Best Practices
+
+- **Token-based authentication is strongly recommended.**
+  - Using a token (`NDB_TOKEN`) avoids storing passwords in cleartext in your `.env` files.
+  - If you must use username/password, be aware that these are stored in cleartext.
+- **Always rotate your token or password regularly.**
+  - Set a schedule for credential rotation (e.g., monthly).
+- **Use a dedicated service account for automation.**
+  - Do not use a personal or admin account.
+  - Limit the service account's roles/permissions to only what the LLM or automation needs.
+- **Enable SSL verification in production.**
+  - Set `NDB_VERIFY_SSL=true` for all production environments.
+- **Never commit credentials to version control.**
+  - Use template files and environment variables for secrets.
 
-## Development Configuration
-
-### Local Development Setup
-
-**1. Create development .env file:**
-```bash
-cp .env.example .env.development
-```
-
-**2. Configure for local development:**
-```bash
-# .env.development
-NDB_BASE_URL=https://ndb-dev.company.local
-NDB_USERNAME=developer
-NDB_PASSWORD=dev-password
-NDB_VERIFY_SSL=false
-NDB_TIMEOUT=60000
-
-# Development features
-NODE_ENV=development
-DEBUG=ndb:*
-LOG_LEVEL=debug
-```
-
-**3. Use development configuration:**
-```bash
-# Load development environment
-export NODE_ENV=development
-cp .env.development .env
-
-# Run tests
-npm run test:connection
-
-# Start development server
-npm run dev
-```
-
-### Testing Configuration
-
-**For automated testing:**
-```bash
-# .env.test
-NDB_BASE_URL=https://ndb-test.company.local
-NDB_USERNAME=test-user
-NDB_PASSWORD=test-password
-NDB_VERIFY_SSL=false
-NDB_TIMEOUT=30000
-
-# Test-specific settings
-NODE_ENV=test
-LOG_LEVEL=error
-```
-
-## Security Configuration
-
-### Credential Management
-
-**1. Use Service Accounts:**
-```bash
-# Production service account
-NDB_USERNAME=ndb-automation-service
-NDB_PASSWORD=complex-service-password-123!
-```
-
-**2. Rotate Credentials Regularly:**
-```bash
-# Update credentials monthly
-# Use password managers for generation
-# Document rotation schedule
-```
-
-### SSL/TLS Configuration
-
-**Production (Always verify SSL):**
-```json
-{
-  "env": {
-    "NDB_VERIFY_SSL": "true"
-  }
-}
-```
-
-**Development (Self-signed certificates):**
-```json
-{
-  "env": {
-    "NDB_VERIFY_SSL": "false"
-  }
-}
-```
-
-**Custom Certificate Authority:**
-```bash
-# Add custom CA certificate to system trust store
-# Then use standard SSL verification
-NDB_VERIFY_SSL=true
-```
-
-### Network Security
-
-**Corporate Proxy Configuration:**
-```json
-{
-  "env": {
-    "HTTP_PROXY": "http://proxy.company.com:8080",
-    "HTTPS_PROXY": "https://proxy.company.com:8080",
-    "NO_PROXY": "localhost,127.0.0.1,.company.local"
-  }
-}
-```
-
-**Firewall Considerations:**
-- Ensure outbound HTTPS (443) access to NDB server
-- Consider VPN requirements for remote access
-- Monitor connection logs for security events
-
-## Performance Optimization
-
-### Timeout Configuration
-
-**For slow networks:**
-```bash
-NDB_TIMEOUT=60000  # 60 seconds
-```
-
-**For fast local networks:**
-```bash
-NDB_TIMEOUT=15000  # 15 seconds
-```
-
-**For production:**
-```bash
-NDB_TIMEOUT=30000  # 30 seconds (default)
-```
-
-### Connection Pooling
-
-The server automatically manages connections, but you can optimize:
-
-```json
-{
-  "env": {
-    "NDB_MAX_RETRIES": "3",
-    "NDB_RETRY_DELAY": "1000",
-    "NDB_KEEP_ALIVE": "true"
-  }
-}
-```
-
-### Memory Optimization
-
-**For large environments:**
-```json
-{
-  "command": "node",
-  "args": [
-    "--max-old-space-size=4096",
-    "--optimize-for-size",
-    "/opt/ndb-mcp-server/dist/index.js"
-  ]
-}
-```
-
-## Multi-Environment Setup
-
-### Environment Variables Pattern
-
-```bash
-# Development
-NDB_BASE_URL_DEV=https://ndb-dev.company.local
-NDB_USERNAME_DEV=dev-user
-NDB_PASSWORD_DEV=dev-password
-
-# Staging  
-NDB_BASE_URL_STAGING=https://ndb-staging.company.com
-NDB_USERNAME_STAGING=staging-user
-NDB_PASSWORD_STAGING=staging-password
-
-# Production
-NDB_BASE_URL_PROD=https://ndb.company.com
-NDB_USERNAME_PROD=prod-service
-NDB_PASSWORD_PROD=prod-password
-```
-
-### Switching Environments
-
-**Using environment selector:**
-```bash
-# Set environment
-export NDB_ENV=development
-# or
-export NDB_ENV=staging
-# or  
-export NDB_ENV=production
-
-# Configuration will auto-select based on NDB_ENV
-```
-
-### Configuration Templates
-
-**Create template files:**
-```bash
-# config/claude-desktop-dev.json
-# config/claude-desktop-staging.json
-# config/claude-desktop-prod.json
-```
-
-**Deploy appropriate template:**
-```bash
-# Deploy development config
-cp config/claude-desktop-dev.json ~/.config/Claude/claude_desktop_config.json
-
-# Restart Claude Desktop
-```
-
-## Troubleshooting Configuration
-
-### Verify Configuration Loading
-
-**Test configuration with connection script:**
-```bash
-npm run test:connection
-```
-
-**Debug configuration loading:**
-```bash
-# Enable debug logging
-DEBUG=ndb:config npm run test:connection
-```
-
-### Common Configuration Issues
-
-**1. Wrong path in Claude Desktop config:**
-```bash
-# Verify path exists
-ls -la /path/to/ndb-mcp-server/dist/index.js
-
-# Check permissions
-file /path/to/ndb-mcp-server/dist/index.js
-```
-
-**2. Environment variables not loading:**
-```bash
-# Test environment variable access
-node -e "console.log(process.env.NDB_BASE_URL)"
-```
-
-**3. SSL certificate issues:**
-```bash
-# Test SSL connectivity
-openssl s_client -connect ndb.company.com:443 -servername ndb.company.com
-
-# Bypass SSL for testing
-NDB_VERIFY_SSL=false npm run test:connection
-```
-
-### Configuration Validation
-
-**Validate JSON syntax:**
-```bash
-# Check Claude Desktop config syntax
-python -m json.tool ~/.config/Claude/claude_desktop_config.json
-```
-
-**Validate .env syntax:**
-```bash
-# Check .env file
-cat .env | grep -v '^#' | grep -v '^$'
-```
-
-### Debug Mode
-
-**Enable comprehensive debugging:**
-```bash
-# .env or environment variables
-DEBUG=ndb:*
-LOG_LEVEL=debug
-NODE_ENV=development
-```
-
-**View debug output:**
-```bash
-DEBUG=ndb:* npm run test:connection
-```
-
-## Configuration Examples by Use Case
-
-### Corporate Environment
-
-```json
-{
-  "mcpServers": {
-    "ndb": {
-      "command": "node",
-      "args": ["/opt/ndb-mcp-server/dist/index.js"],
-      "env": {
-        "NDB_BASE_URL": "https://ndb.corp.company.com",
-        "NDB_USERNAME": "DOMAIN\\service-account",
-        "NDB_PASSWORD": "complex-domain-password",
-        "NDB_VERIFY_SSL": "true",
-        "NDB_TIMEOUT": "45000",
-        "HTTP_PROXY": "http://proxy.corp.company.com:8080",
-        "HTTPS_PROXY": "http://proxy.corp.company.com:8080"
-      }
-    }
-  }
-}
-```
-
-### Cloud Environment
-
-```json
-{
-  "mcpServers": {
-    "ndb": {
-      "command": "node",
-      "args": ["/opt/ndb-mcp-server/dist/index.js"],
-      "env": {
-        "NDB_BASE_URL": "https://ndb.cloud.nutanix.com",
-        "NDB_USERNAME": "cloud-api-user",
-        "NDB_PASSWORD": "cloud-api-key",
-        "NDB_VERIFY_SSL": "true",
-        "NDB_TIMEOUT": "30000"
-      }
-    }
-  }
-}
-```
-
-### Home Lab Environment
-
-```json
-{
-  "mcpServers": {
-    "ndb": {
-      "command": "node",
-      "args": ["/Users/homelab/ndb-mcp-server/dist/index.js"],
-      "env": {
-        "NDB_BASE_URL": "https://192.168.1.100",
-        "NDB_USERNAME": "admin",
-        "NDB_PASSWORD": "homelab-password",
-        "NDB_VERIFY_SSL": "false",
-        "NDB_TIMEOUT": "60000"
-      }
-    }
-  }
-}
-```
-
-## Best Practices
-
-### Configuration Management
-
-1. **Use version control for configuration templates**
-2. **Never commit actual credentials**
-3. **Document environment-specific requirements**
-4. **Implement configuration validation**
-5. **Use configuration management tools for deployment**
-
-### Security Best Practices
-
-1. **Use service accounts with minimal permissions**
-2. **Rotate credentials regularly**
-3. **Enable SSL verification in production**
-4. **Monitor access logs**
-5. **Use secure credential storage**
-
-### Development Best Practices
-
-1. **Use .env files for local development**
-2. **Maintain separate configurations per environment**
-3. **Test configuration changes thoroughly**
-4. **Document custom configuration requirements**
-5. **Use consistent naming conventions**
-
-## Getting Help
-
-For configuration issues:
-
-1. **Run the connection test**: `npm run test:connection`
-2. **Check the logs** for specific error messages
-3. **Verify network connectivity** to NDB server
-4. **Review the [Troubleshooting Guide](troubleshooting.md)**
-5. **Check [Security Guide](security.md)** for security-related config
-6. **Open an issue** with configuration details (sanitized)

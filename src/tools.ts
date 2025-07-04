@@ -3,50 +3,55 @@
  */
 
 export const tools = [
+  ////////////////////////
   // Database Management
+  ////////////////////////
   {
     name: 'list_databases',
-    description: `Get all registered and provisioned databases. Filtering is done using valueType and value fields, which are used to filter the response sent by the NDB API, for flexible filtering.
-    You can filter by any of the following attribute names available in the database object:
-    - name: name of the database, string
-    - description: description of the database, string
-    - ownerId: Id of the user, as any other Id, it needs to be reconciled with the username using the list_users tool
-    - dateCreated: date when the database was created
-    - dateModified: date when database was last modified
-    - clustered: if the database is clustered, boolean    
-    - eraCreated: if the database has been created through NDB (greenfield) or attached (brownfield), boolean
-    - databaseName: same as name, string
-    - type: type of the database engine (postgres_database, oracle_database, etc.)
-    - status: current status of the database (e.g. "READY" when it's operational, "ERA_DAEMON_UNREACHABLE" when the agent is not reachable (and then the database is not managed by NDB), etc.)
-    - dbserverLogicalClusterId: ID of the logical cluster the database is running on, can be reconciled with list_dbservers or get_dbserver tools
-    - timeMachineId: ID of the time machine associated with the database, can be reconciled with list_time_machines or get_time_machine tools
-    - timeZone: time zone of the database
+    description: `Get all registered and provisioned database instances with comprehensive filtering options. Returns a list of database objects with summarized information including status, type, ownership, etc. 
+    Use get_database tool to get detailed information about a specific database instance.
 
-    Examples:
-    - To filter by database type: valueType = "type", value = "postgres_database"
-    - To filter by type and owner: valueType = "type,ownerId", value = "postgres_database,12345"
-    - To filter by status not READY: valueType = "status", value = "!READY"
-    - To filter by creation date after June 1st, 2025: valueType = "dateCreated", value = ">2025-06-01"
-    
-    Hints:
-    - list_databases doesn't not return details about the dbserver and thus the underlying cluster. If a query ask specifically to get database information on a specific cluster, use list_dbservers with loadDatabases set to true, and use additional filters if necessary.
-    - You can combine any number of attributes in valueType and value to filter the results. Always try to use the most specific attributes first to reduce the result set.
-    - You can use operators in value for advanced filtering: !value for negation, >value or <value for comparisons, and *value* for partial (substring) search.
-    - ** Always use available filters ** to reduce the result set, as the NDB API can return a large number of databases, especially in large environments. This will help you find the specific database you are looking for quickly.
-    - You can combine multiple filters in the same query to narrow down the results, such as filtering by type and status at the same time.
-    
+    **Available Filters (valueType/value pairs):**
+    - **name**: Database instance name (supports partial matching with *pattern*)
+    - **description**: Database instance description text
+    - **ownerId**: User ID who owns the database instance (use list_users to resolve usernames)
+    - **dateCreated/dateModified**: Date filters (use >YYYY-MM-DD, <YYYY-MM-DD for comparisons)
+    - **clustered**: true/false - whether database instance is clustered
+    - **eraCreated**: true/false - NDB-provisioned (greenfield) vs registered (brownfield)
+    - **databaseName**: Internal database instance name (often differs from instance name)
+    - **type**: Database engine type (postgres_database, oracle_database, sqlserver_database, mariadb_database, mysql_database, saphana_database, mongodb_database)
+    - **status**: Operational status (READY=operational, ERA_DAEMON_UNREACHABLE=agent issues, PROVISIONING=in progress, FAILED=error state)
+    - **dbserverLogicalClusterId**: Logical cluster hosting the database
+    - **timeMachineId**: Associated time machine for backups
+    - **timeZone**: Database timezone setting
+
+    **Advanced Filtering:**
+    - Operators: !value (not), >value/<value (comparison), *value* (contains)
+    - Multiple filters: combine with comma-separated valueType/value pairs
+    - Example: Find PostgreSQL production databases: valueType=\"type,name\", value=\"postgres_database,*prod*\"
+
+    **Performance Note:** Always use specific filters to reduce result set size in large environments.
+
+    **Use Cases:**
+    - Find databases by engine type or status
+    - Locate databases owned by specific users
+    - Search for databases with naming patterns
+    - Identify problematic databases (non-READY status)
+    - Get overview of database infrastructure
+
+    **Hint:** For databases on specific clusters, use list_dbservers with loadDatabases=true instead.
 
     `,
-    inputSchema: {
+inputSchema: {
       type: 'object',
       properties: {
         valueType: {
           type: 'string',
-          description: 'Comma-separated list of attribute names to filter on (e.g. "databaseType", "databaseType,ownerId")',
+          description: 'Comma-separated list of attribute names to filter on (e.g. \"type\" for engine type, \"type,status\" for multiple filters, \"name\" for database name search)',
         },
         value: {
           type: 'string',
-          description: 'Comma-separated list of values corresponding to valueType (e.g. "postgres_database", "postgres_database,12345")',
+          description: 'Comma-separated list of values corresponding to valueType. Use operators: !value (not), >value/<value (comparison), *value* (contains). Examples: \"postgres_database\", \"READY\", \"*prod*\", \"!READY\"',
         },
 
       },
@@ -55,23 +60,47 @@ export const tools = [
   },
   {
     name: 'get_database',
-    description: 'Get database details by ID, name, or database name',
+    description: `Get detailed information for a specific database. Returns comprehensive database details including configuration, status, cluster information, and associated resources.
+
+    **Returned Information:**
+    - Database configuration and properties
+    - Current operational status and health
+    - Associated time machine and backup details (only timeMachineId if detailed=false)
+    - Infrastructure details in the databaseNodes array of objects, which contains in turn a dbServers collection. 
+    - Database hosted on this instance details in the linkedDatabases array of objects. The info.created_by attribute in the info sub object is useful to identify the user who created the database: if it's "user" it means the database was created by a user (as part of the provisioning process), if it's "system" it means it was created by NDB.
+    - Resource utilization and metadata
+    - Tags and lifecycle configuration
+
+    **Options:**
+    - detailed: Set to true to load complete entity details including timeMachine details. Usefull if you want to get extra info like the number of clones related to this database instance.
+    - loadDbserverCluster: Set to true to include cluster information for the associated dbserver.
+
+    **Search Options:**
+    - By ID: Internal NDB database identifier (most precise)
+    - By name: Database instance name as shown in NDB
+    - By database-name: Internal database name (may differ from instance name)
+    `,
     inputSchema: {
       type: 'object',
       properties: {
         databaseId: {
           type: 'string',
-          description: 'Database ID, name, or database name'
+          description: 'Database identifier - can be NDB database ID, instance name, or internal database name'
         },
         valueType: {
           type: 'string',
-          description: 'Type of identifier',
+          description: 'Type of identifier provided',
           enum: ['id', 'name', 'database-name'],
           default: 'id'
         },
         detailed: {
           type: 'boolean',
-          description: 'Load entities with entire details',
+          description: 'Load complete entity details including extended metadata and properties',
+          default: false
+        },
+        loadDbserverCluster: {
+          type: 'boolean',
+          description: 'Include cluster information for the associated dbserver',
           default: false
         }
       },
@@ -80,96 +109,123 @@ export const tools = [
   },
   {
     name: 'get_provision_inputs',
-    description: 'Get required input parameters for provisioning a specific database engine',
+    description: `Get required and optional parameters for provisioning a specific database engine type. Returns metadata about all configuration options including descriptions, default values, and validation requirements.
+
+    **Supported Database Engines:**
+    - **postgres_database**: PostgreSQL (versions 10+)
+    - **oracle_database**: Oracle Database (11g, 12c, 18c, 19c)
+    - **sqlserver_database**: Microsoft SQL Server (2014+)
+    - **mysql_database**: MySQL (5.7+)
+    - **mariadb_database**: MariaDB (10.x)
+    - **saphana_database**: SAP HANA
+    - **mongodb_database**: MongoDB (4.0+)
+
+    **Use this tool before provision_database to understand required parameters for each engine type.**`,
     inputSchema: {
       type: 'object',
       properties: {
         databaseEngine: {
           type: 'string',
-          description: 'Database engine type',
+          description: 'Database engine type to get provisioning parameters for',
           enum: ['oracle_database', 'postgres_database', 'sqlserver_database', 'mariadb_database', 'mysql_database', 'saphana_database', 'mongodb_database']
         }
       },
       required: ['databaseEngine']
     }
   },
-
-  // Outil provision_database amélioré
   {
     name: 'provision_database',
-    description: 'Provision a new database using NDB with intelligent parameter validation and assistance',
+    description: `Provision a new database instance using NDB with intelligent parameter validation and guided configuration. Creates a database with associated time machine for backups and recovery.
+
+    **Key Features:**
+    - Automatic parameter validation and suggestions for missing required fields
+    - Support for both standalone and clustered deployments
+    - Integrated time machine creation for data protection
+    - Flexible profile assignment (software, compute, network, database parameter)
+
+    **Common Configuration Patterns:**
+    - **Quick Start**: Provide only databaseType and name - other parameters will be suggested
+    - **Production**: Specify all profiles, cluster settings, and SLA requirements
+    - **Development**: Use default profiles with minimal configuration
+
+    **Profile Types:**
+    - **Software Profile**: Database engine version and configuration
+    - **Compute Profile**: CPU, memory, and storage sizing
+    - **Network Profile**: Network settings and VLAN assignment
+    - **Database Parameter Profile**: Engine-specific tuning parameters
+
+    **Time Machine**: Automatically created for backup and recovery capabilities.`,
     inputSchema: {
       type: 'object',
       properties: {
         databaseType: {
           type: 'string',
-          description: 'Type of database to provision',
+          description: 'Database engine type to provision',
           enum: ['oracle_database', 'postgres_database', 'sqlserver_database', 'mariadb_database', 'mysql_database', 'saphana_database', 'mongodb_database']
         },
         name: {
           type: 'string',
-          description: 'Database instance name'
+          description: 'Database instance name (will be visible in NDB interface)'
         },
-        // Paramètres optionnels - seront proposés automatiquement si non fournis
         databaseDescription: {
           type: 'string',
-          description: 'Database description (optional)'
+          description: 'Database description for identification and documentation (optional)'
         },
         softwareProfileId: {
           type: 'string',
-          description: 'Software profile ID (will be suggested if not provided)'
+          description: 'Software profile ID defining database version and base configuration (will be suggested if not provided)'
         },
         softwareProfileVersionId: {
           type: 'string', 
-          description: 'Software profile version ID (will be suggested if not provided)'
+          description: 'Software profile version ID for specific database version (will be suggested if not provided)'
         },
         computeProfileId: {
           type: 'string',
-          description: 'Compute profile ID (will be suggested if not provided)'
+          description: 'Compute profile ID defining CPU, memory, and storage resources (will be suggested if not provided)'
         },
         networkProfileId: {
           type: 'string',
-          description: 'Network profile ID (will be suggested if not provided)'
+          description: 'Network profile ID defining VLAN and network configuration (will be suggested if not provided)'
         },
         dbParameterProfileId: {
           type: 'string',
-          description: 'Database parameter profile ID (will be suggested if not provided)'
+          description: 'Database parameter profile ID for engine-specific tuning (will be suggested if not provided)'
         },
         nxClusterId: {
           type: 'string',
-          description: 'Nutanix cluster ID (will be suggested if not provided)'
+          description: 'Nutanix cluster ID where database will be deployed (will be suggested if not provided)'
         },
         newDbServerTimeZone: {
           type: 'string',
-          description: 'Database server time zone (optional)'
+          description: 'Database server timezone (e.g. \"UTC\", \"America/New_York\", \"Europe/London\") - optional'
         },
         createDbserver: {
           type: 'boolean',
-          description: 'Create new database server for database',
+          description: 'Create new database server VM for this database (true) or use existing server (false)',
           default: true
         },
         nodeCount: {
           type: 'integer',
-          description: 'Number of nodes for clustered deployment',
+          description: 'Number of nodes for clustered deployment (1 for standalone)',
           default: 1
         },
         clustered: {
           type: 'boolean',  
-          description: 'Whether to create a clustered database',
+          description: 'Deploy as clustered database for high availability (requires nodeCount > 1)',
           default: false
         },
         sshPublicKey: {
           type: 'string',
-          description: 'SSH public key for server access (optional)'
+          description: 'SSH public key for server access and administration (optional)'
         },
-        autoTuneStagingDrive: {
+        autoTuneStaging_drive: {
           type: 'boolean',
-          description: 'Auto-tune staging drive (optional)',
+          description: 'Enable automatic staging drive optimization (recommended for most deployments)',
           default: false
         },
         nodes: {
           type: 'array',
-          description: 'Node configuration for multi-node deployments (optional)',
+          description: 'Node configuration for multi-node clustered deployments (required for clustered=true)',
           items: {
             type: 'object',
             properties: {
@@ -183,15 +239,15 @@ export const tools = [
         },
         slaId: {
           type: 'string',
-          description: 'SLA ID (optional)'
+          description: 'SLA ID for backup and retention policies (optional - default SLA will be used)'
         },
         timeMachineInfo: {
           type: 'object',
-          description: 'Time machine configuration (optional)'
+          description: 'Time machine configuration for backup and recovery policies (optional - defaults will be applied)'
         },
         actionArguments: {
           type: 'array',
-          description: 'Engine-specific configuration arguments (will be prompted for based on database type)',
+          description: 'Engine-specific configuration parameters (use get_provision_inputs to see available options for each database type)',
           items: {
             type: 'object',
             properties: {
@@ -200,10 +256,9 @@ export const tools = [
             }
           }
         },
-        // Nouveau paramètre pour forcer le provisioning sans validation
         skipValidation: {
           type: 'boolean',
-          description: 'Skip parameter validation and proceed directly',
+          description: 'Skip parameter validation and proceed directly with provided values (use with caution)',
           default: false
         }
       },

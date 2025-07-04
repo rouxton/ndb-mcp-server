@@ -10,6 +10,7 @@ import https from 'https';
 import { dirname, join } from 'path';
 import { readFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
+import readline from 'readline';
 
 // ES6 equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -27,14 +28,31 @@ const colors = {
 };
 
 /**
+ * Prompt for environment name (sync)
+ */
+function promptEnvironment() {
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    rl.question('Environnement à tester (laisser vide pour ".env") : ', (env) => {
+      rl.close();
+      resolve(env.trim());
+    });
+  });
+}
+
+/**
  * Load environment configuration
  */
-function loadConfig() {
-  // Try to load .env file
-  const envPath = join(process.cwd(), '.env');
+function loadConfig(envName = '') {
+  // Try to load .env or .env.<env> file
+  let envFile = '.env';
+  if (envName) {
+    envFile = `.env.${envName}`;
+  }
+  const envPath = join(process.cwd(), envFile);
   
   if (existsSync(envPath)) {
-    console.log(`${colors.blue}ℹ️  Loading configuration from .env file...${colors.reset}`);
+    console.log(`${colors.blue}\u2139\ufe0f  Chargement de la configuration depuis ${envFile}...${colors.reset}`);
     const envContent = readFileSync(envPath, 'utf8');
     
     envContent.split('\n').forEach(line => {
@@ -42,16 +60,19 @@ function loadConfig() {
       if (key && valueParts.length) {
         const value = valueParts.join('=').trim();
         // Remove quotes if present
-        const cleanValue = value.replace(/^["']|["']$/g, '');
+        const cleanValue = value.replace(/^\"|\"$/g, '');
         process.env[key.trim()] = cleanValue;
       }
     });
+  } else {
+    console.log(`${colors.yellow}\u26a0\ufe0f  Fichier ${envFile} introuvable, vérifiez le nom d'environnement.${colors.reset}`);
   }
 
   const config = {
     baseUrl: process.env.NDB_BASE_URL,
     username: process.env.NDB_USERNAME,
     password: process.env.NDB_PASSWORD,
+    token: process.env.NDB_TOKEN,
     verifySSL: process.env.NDB_VERIFY_SSL !== 'false',
     timeout: parseInt(process.env.NDB_TIMEOUT || '30000')
   };
@@ -59,12 +80,11 @@ function loadConfig() {
   // Validate required configuration
   const missing = [];
   if (!config.baseUrl) missing.push('NDB_BASE_URL');
-  if (!config.username) missing.push('NDB_USERNAME');
-  if (!config.password) missing.push('NDB_PASSWORD');
-
+  if (!config.token && !config.username) missing.push('NDB_USERNAME');
+  if (!config.token && !config.password) missing.push('NDB_PASSWORD');
   if (missing.length > 0) {
-    console.error(`${colors.red}❌ Missing required environment variables: ${missing.join(', ')}${colors.reset}`);
-    console.error(`${colors.yellow}Please set these variables or create a .env file.${colors.reset}`);
+    console.error(`${colors.red}\u274c Variables d'environnement manquantes: ${missing.join(', ')}${colors.reset}`);
+    console.error(`${colors.yellow}Merci de renseigner ces variables ou de créer le fichier ${envFile}.${colors.reset}`);
     process.exit(1);
   }
 
@@ -74,7 +94,10 @@ function loadConfig() {
 /**
  * Create Basic Authentication header
  */
-function createAuthHeader(username, password) {
+function createAuthHeader(username, password, token) {
+  if (token) {
+    return `Bearer ${token}`;
+  }
   const credentials = `${username}:${password}`;
   const base64Credentials = Buffer.from(credentials, 'utf8').toString('base64');
   return `Basic ${base64Credentials}`;
@@ -96,7 +119,7 @@ function makeRequest(config, path, method = 'GET') {
       timeout: config.timeout,
       rejectUnauthorized: config.verifySSL,
       headers: {
-        'Authorization': createAuthHeader(config.username, config.password),
+        'Authorization': createAuthHeader(config.username, config.password, config.token),
         'Accept': 'application/json',
         'User-Agent': 'NDB-MCP-Server/1.0'
       }
@@ -213,6 +236,10 @@ async function testAuthentication(config) {
     } else if (response.status === 401) {
       console.log(`${colors.red}❌ Authentication: FAILED (Invalid credentials)${colors.reset}`);
       return false;
+    } else if (response.status === 410) {
+      console.log(`${colors.red}❌ Authentication: FAILED (Token expired or invalid)${colors.reset}`);
+      console.log(`${colors.yellow}Your NDB_TOKEN is expired or invalid. Please re-run 'npm run configure' to generate a new token.${colors.reset}`);
+      return false;
     } else {
       console.log(`${colors.yellow}⚠️  Authentication: Unexpected response ${response.status}${colors.reset}`);
       return false;
@@ -231,13 +258,19 @@ async function main() {
   console.log(`${colors.cyan}Testing connectivity to Nutanix Database Service API${colors.reset}\n`);
 
   try {
-    // Load configuration
-    const config = loadConfig();
+    // Demander l'environnement à tester
+    const envName = await promptEnvironment();
+    // Charger la configuration de l'environnement choisi
+    const config = loadConfig(envName);
     
     console.log(`${colors.blue}ℹ️  Configuration:${colors.reset}`);
     console.log(`   NDB URL: ${config.baseUrl}`);
-    console.log(`   Username: ${config.username}`);
-    console.log(`   Password: ${'*'.repeat(config.password.length)}`);
+    if (config.token) {
+      console.log(`   Authentication: Token (Bearer)`);
+    } else {
+      console.log(`   Username: ${config.username}`);
+      console.log(`   Password: ${'*'.repeat(config.password.length)}`);
+    }
     console.log(`   SSL Verify: ${config.verifySSL}`);
     console.log(`   Timeout: ${config.timeout}ms`);
 

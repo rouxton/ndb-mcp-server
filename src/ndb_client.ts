@@ -30,13 +30,14 @@ export class NDBClient {
     });
 
     // Add request interceptor to handle authentication
-    // Use simple Basic Auth that we know works from the test script
     this.client.interceptors.request.use((config) => {
-      // Create Basic Auth header using the same method as test script
-      const credentials = `${this.config.username}:${this.config.password}`;
-      const base64Credentials = Buffer.from(credentials, 'utf8').toString('base64');
-      config.headers.Authorization = `Basic ${base64Credentials}`;
-      
+      if (this.config.token) {
+        config.headers.Authorization = `Bearer ${this.config.token}`;
+      } else if (this.config.username && this.config.password) {
+        const credentials = `${this.config.username}:${this.config.password}`;
+        const base64Credentials = Buffer.from(credentials, 'utf8').toString('base64');
+        config.headers.Authorization = `Basic ${base64Credentials}`;
+      }
       return config;
     });
 
@@ -46,6 +47,8 @@ export class NDBClient {
       async (error) => {
         if (error.response?.status === 401) {
           console.error('❌ Authentication failed - check NDB credentials');
+        } else if (error.response?.status === 410) {
+          console.error('❌ Token expired or invalid - please re-run `npm run configure` to generate a new token.');
         } else if (error.response?.status === 403) {
           console.error('❌ Access forbidden - user may lack required permissions');
         } else if (error.response?.status === 404) {

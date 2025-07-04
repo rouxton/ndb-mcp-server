@@ -31,41 +31,28 @@ A comprehensive Model Context Protocol (MCP) server for **Nutanix Database Servi
    powershell -ExecutionPolicy Bypass -File scripts/setup.ps1
    ```
 
-3. **Configure your NDB connection:**
-   ```bash
-   cp .env.example .env
-   # Edit .env with your NDB server details
-   ```
-
 4. **Build and test:**
    ```bash
    npm run build
    npm start
    ```
 
-### Claude Desktop Integration
 
-Add to your Claude Desktop configuration:
+## Authentication & Environment Setup
 
-```json
-{
-  "mcpServers": {
-    "ndb": {
-      "command": "node",
-      "args": ["/path/to/ndb-mcp-server/dist/index.js"],
-      "env": {
-        "NDB_BASE_URL": "https://your-ndb-server.com",
-        "NDB_USERNAME": "your-username",
-        "NDB_PASSWORD": "your-password"
-      }
-    }
-  }
-}
+The NDB MCP Server supports both basic authentication and token-based authentication for connecting to the Nutanix Database Service (NDB) API.
+
+### Interactive Configuration
+
+You can use the following command to interactively configure your environment and generate a valid `.env` file:
+
+```bash
+npm run configure
 ```
 
-**Configuration file locations:**
-- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+This tool will prompt for all required connection and authentication details, including the option to generate and store a token automatically if you select token-based authentication.
+
+See [docs/configuration.md](./docs/configuration.md) for details and examples.
 
 ## 🧪 Testing
 
