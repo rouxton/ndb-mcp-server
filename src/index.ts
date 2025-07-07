@@ -21,7 +21,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 
 import { NDBClient, createNDBClient } from './ndb_client.js';
-import { formatResponse, parseJsonArgument } from './utils.js';
+import { formatResponse, parseJsonArgument, advancedFilter } from './utils.js';
 import { tools } from './tools.js';
 import type { ToolCallArgs } from './types.js';
 
@@ -29,7 +29,7 @@ import type { ToolCallArgs } from './types.js';
 const server = new Server(
   {
     name: 'ndb-mcp-server',
-    version: '1.1.0',
+    version: '1.1.3', // Updated version
     description: `NDB MCP Server for managing Nutanix Database Service (NDB). It provides mutliples tools to manage databases, clones, snapshots, and infrastructure through natural language commands.
     
     Hints:
@@ -37,6 +37,7 @@ const server = new Server(
     - Use the most specific attributes first to reduce the result set.
     - Combine multiple filters in the same query to narrow down the results.
     - If the request fails, never try to fall back to a more generic tool, always try to fix the request by providing the missing parameters or correcting the syntax.
+    - This MCP server does not provide tools to configure NDB itself, such as creating users or configuring profiles. It is focused on database management, clones, snapshots, and infrastructure operations. Configure NDB using the official NDB UI or CLI.
 
     `,
   }
@@ -196,60 +197,28 @@ async function handleToolCall(name: string, args: ToolCallArgs): Promise<any> {
 ///////////////////////////////
 async function handleListDatabases(args: any) {
   const allDatabases = await ndbClient.get('/databases', null);
-
-  let filtered = allDatabases;
-  // Enhanced filtering: supports !, >, <, >=, <=, *partial*, and exact match
-  if (Array.isArray(filtered) && args.valueType && args.value) {
-    const keys = args.valueType.split(',').map((k: string) => k.trim());
-    const values = args.value.split(',').map((v: string) => v.trim());
-    filtered = filtered.filter((db: any) =>
-      keys.every((key: string, idx: number) => {
-        const val = values[idx];
-        const dbVal = db[key];
-        if (val.startsWith('!')) {
-          // Negative match
-          return String(dbVal) !== val.substring(1);
-        } else if (val.startsWith('>=')) {
-          return dbVal >= val.substring(2);
-        } else if (val.startsWith('<=')) {
-          return dbVal <= val.substring(2);
-        } else if (val.startsWith('>')) {
-          return dbVal > val.substring(1);
-        } else if (val.startsWith('<')) {
-          return dbVal < val.substring(1);
-        } else if (val.startsWith('*') && val.endsWith('*')) {
-          // Partial match (case-insensitive)
-          const search = val.slice(1, -1).toLowerCase();
-          return String(dbVal).toLowerCase().includes(search);
-        } else {
-          // Exact match
-          return String(dbVal) === val;
-        }
-      })
-    );
-  }
-  // Only keep the main properties as per the required schema
-  if (Array.isArray(filtered)) {
-    filtered = filtered.map((db: any) => ({
-      id: db.id,
-      name: db.name,
-      description: db.description,
-      ownerId: db.ownerId,
-      dateCreated: db.dateCreated,
-      dateModified: db.dateModified,
-      clustered: db.clustered,      
-      eraCreated: db.eraCreated,
-      placeholder: db.placeholder,
-      databaseName: db.databaseName,
-      type: db.type,
-      status: db.status,
-      databaseStatus: db.databaseStatus,
-      dbserverLogicalClusterId: db.dbserverLogicalClusterId,
-      timeMachineId: db.timeMachineId,
-      timeZone: db.timeZone
-    }));
-  }
-
+  // Map first, then apply advanced filtering
+  let mapped = Array.isArray(allDatabases)
+    ? allDatabases.map((db: any) => ({
+        id: db.id,
+        name: db.name,
+        description: db.description,
+        ownerId: db.ownerId,
+        dateCreated: db.dateCreated,
+        dateModified: db.dateModified,
+        clustered: db.clustered,      
+        eraCreated: db.eraCreated,
+        placeholder: db.placeholder,
+        databaseName: db.databaseName,
+        type: db.type,
+        status: db.status,
+        databaseStatus: db.databaseStatus,
+        dbserverLogicalClusterId: db.dbserverLogicalClusterId,
+        timeMachineId: db.timeMachineId,
+        timeZone: db.timeZone
+      }))
+    : [];
+  let filtered = advancedFilter(mapped, args.valueType, args.value);
   return filtered;
 }
 
@@ -309,7 +278,7 @@ async function executeProvisionDatabase(args: any) {
     actionArguments: args.actionArguments || []
   };
 
-  // add optional parameters if they exist
+  // Add optional parameters if they exist
   if (args.databaseDescription) {
     data.databaseDescription = args.databaseDescription;
   }
@@ -346,7 +315,7 @@ async function executeProvisionDatabase(args: any) {
     data.autoTuneStagingDrive = args.autoTuneStagingDrive;
   }
 
-  // map actionArguments to the expected format
+  // Map actionArguments to the expected format
   if (args.actionArguments && Array.isArray(args.actionArguments)) {
     data.actionArguments = args.actionArguments.map((arg: any) => ({
       name: arg.name,
@@ -354,7 +323,7 @@ async function executeProvisionDatabase(args: any) {
     }));
   }
 
-  // map nodes if provided
+  // Map nodes if provided
   if (args.nodes && Array.isArray(args.nodes)) {
     data.nodes = args.nodes.map((node: any) => ({
       properties: node.properties || [],
@@ -362,7 +331,7 @@ async function executeProvisionDatabase(args: any) {
     }));
   }
 
-  // map SLA at the timeMachineInfo level
+  // Map SLA at the timeMachineInfo level
   if (args.slaId) {
     data.timeMachineInfo = data.timeMachineInfo || {};
     data.timeMachineInfo.slaId = args.slaId;
@@ -374,7 +343,7 @@ async function executeProvisionDatabase(args: any) {
 async function validateAndCollectMissingParams(args: any) {
   const missing = [];
 
-  // Vérifier les paramètres communs requis
+  // Check required common parameters
   if (!args.softwareProfileId) {
     missing.push({
       parameter: 'softwareProfileId',
@@ -415,7 +384,7 @@ async function validateAndCollectMissingParams(args: any) {
     });
   }
 
-  // check specific parameters based on database type
+  // Check specific parameters based on database type
   const engineInputs = await ndbClient.get(`/app_types/${args.databaseType}/provision/input-file`, { 
     category: 'db_server;database' 
   });
@@ -554,115 +523,60 @@ async function handleDeregisterDatabase(args: any) {
 }
 
 ///////////////////////////////////
-
-
-//////////////////////////////////////
 // Database Server Management Handlers
 //////////////////////////////////////
 async function handleListDbservers(args: any) {
-  // Only pass load-databases and load-clones to the API
   const params: any = {
     'load-databases': args.loadDatabases,
     'load-clones': args.loadClones
   };
   const fullList = await ndbClient.get('/dbservers', params);
-
-  let filtered = fullList;
-  // Advanced filtering for dbserver and nested databases array
-  if (Array.isArray(filtered) && args.valueType && args.value) {
-    const keys = args.valueType.split(',').map((k: string) => k.trim());
-    const values = args.value.split(',').map((v: string) => v.trim());
-    filtered = filtered.filter((srv: any) =>
-      keys.every((key: string, idx: number) => {
-        const val = values[idx];
-        // Nested filter for databases.*
-        if (key.startsWith('databases.')) {
-          const dbKey = key.split('.').slice(1).join('.');
-          if (!Array.isArray(srv.databases)) return false;
-          // If filter is on databases.length
-          if (dbKey === '' || dbKey === 'length') {
-            const count = srv.databases.length;
-            if (val.startsWith('>=')) return count >= Number(val.substring(2));
-            if (val.startsWith('<=')) return count <= Number(val.substring(2));
-            if (val.startsWith('>')) return count > Number(val.substring(1));
-            if (val.startsWith('<')) return count < Number(val.substring(1));
-            if (val.startsWith('=')) return count === Number(val.substring(1));
-            return count === Number(val);
-          }
-          // Otherwise, filter on a property of at least one database
-          return srv.databases.some((db: any) => {
-            if (val.startsWith('!')) return String(db[dbKey]) !== val.substring(1);
-            if (val.startsWith('>=')) return db[dbKey] >= val.substring(2);
-            if (val.startsWith('<=')) return db[dbKey] <= val.substring(2);
-            if (val.startsWith('>')) return db[dbKey] > val.substring(1);
-            if (val.startsWith('<')) return db[dbKey] < val.substring(1);
-            if (val.startsWith('*') && val.endsWith('*')) {
-              const search = val.slice(1, -1).toLowerCase();
-              return String(db[dbKey]).toLowerCase().includes(search);
-            }
-            return String(db[dbKey]) === val;
-          });
-        } else {
-          // Standard dbserver property
-          const srvVal = srv[key];
-          if (val.startsWith('!')) return String(srvVal) !== val.substring(1);
-          if (val.startsWith('>=')) return srvVal >= val.substring(2);
-          if (val.startsWith('<=')) return srvVal <= val.substring(2);
-          if (val.startsWith('>')) return srvVal > val.substring(1);
-          if (val.startsWith('<')) return srvVal < val.substring(1);
-          if (val.startsWith('*') && val.endsWith('*')) {
-            const search = val.slice(1, -1).toLowerCase();
-            return String(srvVal).toLowerCase().includes(search);
-          }
-          return String(srvVal) === val;
+  // Mapping d'abord, puis filtrage avancé
+  let mapped = Array.isArray(fullList)
+    ? fullList.map((srv: any) => {
+        const mapped: any = {
+          id: srv.id,
+          eraCreated: srv.eraCreated,
+          dbserverClusterId: srv.dbserverClusterId,
+          name: srv.name,
+          description: srv.description,
+          ipAddresses: srv.ipAddresses,
+          fqdns: srv.fqdns,
+          type: srv.type,
+          status: srv.status,
+          nxClusterId: srv.nxClusterId,
+          databaseType: srv.databaseType,
+          eraVersion: srv.eraVersion,
+          ownerId: srv.ownerId,
+          dateCreated: srv.dateCreated,
+          dateModified: srv.dateModified
+        };
+        if (args.loadDatabases !== false || args.loadClones !== false) {
+          mapped.databases = Array.isArray(srv.databases)
+            ? srv.databases.map((db: any) => ({
+                id: db.id,
+                name: db.name,
+                description: db.description,
+                ownerId: db.ownerId,
+                dateCreated: db.dateCreated,
+                dateModified: db.dateModified,
+                clustered: db.clustered,
+                clone: db.clone,
+                databaseName: db.databaseName,
+                type: db.type,
+                status: db.status,
+                dbserverLogicalClusterId: db.dbserverLogicalClusterId,
+                timeMachineId: db.timeMachineId,
+                parentTimeMachineId: db.parentTimeMachineId,
+                timeZone: db.timeZone
+              }))
+            : [];
         }
+        return mapped;
       })
-    );
-  }
-
-  // Map to main properties, remove databases/clones if not loaded
-  return filtered.map((srv: any) => {
-    const mapped: any = {
-      id: srv.id,
-      eraCreated: srv.eraCreated,
-      dbserverClusterId: srv.dbserverClusterId,
-      name: srv.name,
-      description: srv.description,
-      ipAddresses: srv.ipAddresses,
-      fqdns: srv.fqdns,
-      type: srv.type,
-      status: srv.status,
-      nxClusterId: srv.nxClusterId,
-      databaseType: srv.databaseType,
-      eraVersion: srv.eraVersion,
-      ownerId: srv.ownerId,
-      dateCreated: srv.dateCreated,
-      dateModified: srv.dateModified
-    };
-    if (args.loadDatabases !== false || args.loadClones !== false) {
-      mapped.databases = Array.isArray(srv.databases)
-        ? srv.databases.map((db: any) => ({
-            id: db.id,
-            name: db.name,
-            description: db.description,
-            ownerId: db.ownerId,
-            dateCreated: db.dateCreated,
-            dateModified: db.dateModified,
-            clustered: db.clustered,
-            clone: db.clone,
-            databaseName: db.databaseName,
-            type: db.type,
-            status: db.status,
-            dbserverLogicalClusterId: db.dbserverLogicalClusterId,
-            timeMachineId: db.timeMachineId,
-            parentTimeMachineId: db.parentTimeMachineId,
-            timeZone: db.timeZone
-          }))
-        : [];
-    }
-   
-    return mapped;
-  });
+    : [];
+  let filtered = advancedFilter(mapped, args.valueType, args.value);
+  return filtered;
 }
 
 async function handleGetDbserver(args: any) {
@@ -692,56 +606,25 @@ async function handleRegisterDbserver(args: any) {
 async function handleListClones(args: any) {
   // Get all clones from NDB
   const allClones = await ndbClient.get('/clones', null);
-
-  let filtered = allClones;
-  // Enhanced filtering: supports !, >, <, >=, <=, *partial*, and exact match
-  if (Array.isArray(filtered) && args.valueType && args.value) {
-    const keys = args.valueType.split(',').map((k: string) => k.trim());
-    const values = args.value.split(',').map((v: string) => v.trim());
-    filtered = filtered.filter((clone: any) =>
-      keys.every((key: string, idx: number) => {
-        const val = values[idx];
-        const cloneVal = clone[key];
-        if (val.startsWith('!')) {
-          // Negative match
-          return String(cloneVal) !== val.substring(1);
-        } else if (val.startsWith('>=')) {
-          return cloneVal >= val.substring(2);
-        } else if (val.startsWith('<=')) {
-          return cloneVal <= val.substring(2);
-        } else if (val.startsWith('>')) {
-          return cloneVal > val.substring(1);
-        } else if (val.startsWith('<')) {
-          return cloneVal < val.substring(1);
-        } else if (val.startsWith('*') && val.endsWith('*')) {
-          // Partial match (case-insensitive)
-          const search = val.slice(1, -1).toLowerCase();
-          return String(cloneVal).toLowerCase().includes(search);
-        } else {
-          // Exact match
-          return String(cloneVal) === val;
-        }
-      })
-    );
-  }
-  // Only keep the main properties as per the required schema
-  if (Array.isArray(filtered)) {
-    filtered = filtered.map((clone: any) => ({
-      id: clone.id,
-      name: clone.name,
-      description: clone.description,
-      ownerId: clone.ownerId,
-      dateCreated: clone.dateCreated,
-      dateModified: clone.dateModified,
-      databaseName: clone.databaseName,
-      type: clone.type,
-      status: clone.status,
-      dbserverLogicalClusterId: clone.dbserverLogicalClusterId,
-      timeMachineId: clone.timeMachineId,
-      parentTimeMachineId: clone.parentTimeMachineId,
-      timeZone: clone.timeZone
-    }));
-  }
+  // Mapping d'abord, puis filtrage avancé
+  let mapped = Array.isArray(allClones)
+    ? allClones.map((clone: any) => ({
+        id: clone.id,
+        name: clone.name,
+        description: clone.description,
+        ownerId: clone.ownerId,
+        dateCreated: clone.dateCreated,
+        dateModified: clone.dateModified,
+        databaseName: clone.databaseName,
+        type: clone.type,
+        status: clone.status,
+        dbserverLogicalClusterId: clone.dbserverLogicalClusterId,
+        timeMachineId: clone.timeMachineId,
+        parentTimeMachineId: clone.parentTimeMachineId,
+        timeZone: clone.timeZone
+      }))
+    : [];
+  let filtered = advancedFilter(mapped, args.valueType, args.value);
   return filtered;
 }
 
@@ -790,13 +673,40 @@ async function handleDeleteClone(args: any) {
 
 // Time Machine Management Handlers
 async function handleListTimeMachines(args: any) {
-  const params = {
-    'value-type': args.valueType,
-    value: args.value,
-    'load-database': args.loadDatabase,
-    'load-clones': args.loadClones
-  };
-  return await ndbClient.get('/tms', params);
+  // No params to API, always use defaults
+  const allTms = await ndbClient.get('/tms', null);
+  // Map first to the reduced schema to guarantee the presence of properties, then filter
+  let mapped = Array.isArray(allTms)
+    ? allTms.map((tm: any) => ({
+        id: tm.id,
+        name: tm.name,
+        description: tm.description,
+        databaseId: tm.databaseId,
+        logDriveId: tm.logDriveId,
+        type: tm.type,
+        status: tm.status,
+        slaId: tm.slaId,
+        scheduleId: tm.scheduleId,
+        ownerId: tm.ownerId,
+        dateCreated: tm.dateCreated,
+        dateModified: tm.dateModified,
+        properties: Array.isArray(tm.properties)
+          ? tm.properties.map((p: any) => ({
+              ref_id: p.ref_id,
+              name: p.name,
+              value: p.value,
+              secure: p.secure ?? false,
+              description: p.description
+            }))
+          : [],
+        zeroSla: tm.zeroSla ?? false,
+        slaSet: tm.slaSet ?? false,
+        continuousRecoveryEnabled: tm.continuousRecoveryEnabled ?? false,
+        snapshotableState: tm.snapshotableState ?? false
+      }))
+    : [];
+  let filtered = advancedFilter(mapped, args.valueType, args.value);
+  return filtered;
 }
 
 async function handleGetTimeMachine(args: any) {
@@ -832,13 +742,76 @@ async function handleResumeTimeMachine(args: any) {
 
 // Snapshot Management Handlers
 async function handleListSnapshots(args: any) {
-  const params = {
-    'value-type': args.valueType,
-    value: args.value,
+  // Liste des valueType supportés côté API
+  const apiKeys = [
+    'type',
+    'status',
+    'protection-domain-id',
+    'database-node',
+    'snapshot-id',
+    'time-machine',
+    'latest'
+  ];
+  let apiValueTypes: string[] = [];
+  let apiValues: string[] = [];
+  let localValueTypes: string[] = [];
+  let localValues: string[] = [];
+
+  if (args.valueType && args.value) {
+    const keys = args.valueType.split(',').map((k: string) => k.trim());
+    const values = args.value.split(',').map((v: string) => v.trim());
+    for (let i = 0; i < keys.length; i++) {
+      if (apiKeys.includes(keys[i])) {
+        apiValueTypes.push(keys[i]);
+        apiValues.push(values[i]);
+      } else {
+        localValueTypes.push(keys[i]);
+        localValues.push(values[i]);
+      }
+    }
+  }
+
+  // Prépare les paramètres API uniquement avec les filtres supportés
+  const params: any = {
     'database-ids': args.databaseIds,
     limit: args.limit || 100
   };
-  return await ndbClient.get('/snapshots', params);
+  if (apiValueTypes.length > 0) {
+    params['value-type'] = apiValueTypes.join(',');
+    params['value'] = apiValues.join(',');
+  }
+
+  const snapshots = await ndbClient.get('/snapshots', params);
+  // Mapping réduit selon le schéma fourni
+  let mapped = Array.isArray(snapshots)
+    ? snapshots.map((s: any) => ({
+        id: s.id,
+        name: s.name,
+        description: s.description,
+        ownerId: s.ownerId,
+        dateCreated: s.dateCreated,
+        dateModified: s.dateModified,
+        queryCount: s.queryCount,
+        snapshotId: s.snapshotId,
+        snapshotUuid: s.snapshotUuid,
+        protectionDomainId: s.protectionDomainId,
+        timeMachineId: s.timeMachineId,
+        databaseNodeId: s.databaseNodeId,
+        appInfoVersion: s.appInfoVersion,
+        status: s.status,
+        type: s.type,
+        snapshotTimeStamp: s.snapshotTimeStamp,
+        snapshotSize: s.snapshotSize,
+        fromTimeStamp: s.fromTimeStamp,
+        toTimeStamp: s.toTimeStamp
+      }))
+    : [];
+  // Only local advanced filtering on valueType not supported by the API
+  let filtered =
+    localValueTypes.length > 0
+      ? advancedFilter(mapped, localValueTypes.join(','), localValues.join(','))
+      : mapped;
+  return filtered;
 }
 
 async function handleGetSnapshot(args: any) {
@@ -868,10 +841,29 @@ async function handleDeleteSnapshot(args: any) {
 
 // Infrastructure Handlers
 async function handleListClusters(args: any) {
-  const params = {
-    'include-management-server-info': args.includeManagementServerInfo || false
-  };
-  return await ndbClient.get('/clusters', params);
+  // Appel API sans paramètre
+  const allClusters = await ndbClient.get('/clusters', null);
+  // Mapping réduit selon le schéma demandé
+  let mapped = Array.isArray(allClusters)
+    ? allClusters.map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        uniqueName: c.uniqueName,
+        ipAddresses: Array.isArray(c.ipAddresses) ? c.ipAddresses : [],
+        fqdns: Array.isArray(c.fqdns) ? c.fqdns : [],
+        description: c.description,
+        cloudType: c.cloudType,
+        dateCreated: c.dateCreated,
+        dateModified: c.dateModified,
+        ownerId: c.ownerId,
+        status: c.status,
+        version: c.version,
+        hypervisorType: c.hypervisorType,
+        hypervisorVersion: c.hypervisorVersion
+      }))
+    : [];
+  let filtered = advancedFilter(mapped, args.valueType, args.value);
+  return filtered;
 }
 
 async function handleGetCluster(args: any) {
@@ -890,7 +882,52 @@ async function handleListProfiles(args: any) {
     engine: args.engine,
     type: args.type
   };
-  return await ndbClient.get('/profiles', params);
+  let profiles = await ndbClient.get('/profiles', params);
+  // Mapping d'abord, puis filtrage avancé
+  let mapped = Array.isArray(profiles)
+    ? profiles.map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        description: p.description,
+        dateCreated: p.dateCreated,
+        dateModified: p.dateModified,
+        owner: p.owner,
+        engineType: p.engineType,
+        type: p.type,
+        nxClusterId: p.nxClusterId,
+        topology: p.topology,
+        dbVersion: p.dbVersion,
+        systemProfile: p.systemProfile ?? false,
+        assocDbServers: Array.isArray(p.assocDbServers) ? p.assocDbServers : [],
+        assocDatabases: Array.isArray(p.assocDatabases) ? p.assocDatabases : [],
+        latestVersion: p.latestVersion,
+        latestVersionId: p.latestVersionId,
+        versions: Array.isArray(p.versions)
+          ? p.versions.map((v: any) => ({
+              id: v.id,
+              name: v.name,
+              description: v.description,
+              dateCreated: v.dateCreated,
+              dateModified: v.dateModified,
+              owner: v.owner,
+              engineType: v.engineType,
+              type: v.type,
+              nxClusterId: v.nxClusterId,
+              topology: v.topology,
+              dbVersion: v.dbVersion,
+              systemProfile: v.systemProfile ?? false,
+              assocDbServers: Array.isArray(v.assocDbServers) ? v.assocDbServers : [],
+              assocDatabases: Array.isArray(v.assocDbServers) ? v.assocDbServers : [],
+              version: v.version,
+              profileId: v.profileId,
+              published: v.published ?? false,
+              deprecated: v.deprecated ?? false
+            }))
+          : []
+      }))
+    : [];
+  let filtered = advancedFilter(mapped, args.valueType, args.value);
+  return filtered;
 }
 
 async function handleGetProfile(args: any) {
@@ -933,12 +970,29 @@ async function handleGetSla(args: any) {
 
 // Operations and Monitoring Handlers
 async function handleListOperations(args: any) {
-  const params = {
-    days: args.days,
-    'entity-id': args.entityId,
-    status: args.status,
-    limit: args.limit
-  };
+  const params: any = {};
+  if (args.dbserverId) params['dbserver-id'] = args.dbserverId;
+  if (args['eraServer'] !== undefined) params['era-server'] = args['eraServer'];
+  if (args.ip) params['ip'] = args.ip;
+  if (args.clientId) params['client-id'] = args.clientId;
+  if (args.status) params['status'] = args.status;
+  if (args.type) params['type'] = args.type;
+  if (args.hideSubops !== undefined) params['hide-subops'] = args.hideSubops;
+  if (args.systemTriggered !== undefined) params['system-triggered'] = args.systemTriggered;
+  if (args.userTriggered !== undefined) params['user-triggered'] = args.userTriggered;
+  if (args.scheduled !== undefined) params['scheduled'] = args.scheduled;
+  if (args.dateSubmitted) params['date-submitted'] = args.dateSubmitted;
+  if (args.fromTime) params['from-time'] = args.fromTime;
+  if (args.toTime) params['to-time'] = args.toTime;
+  if (args.days) params['days'] = args.days;
+  if (args.entityId) params['entity-id'] = args.entityId;
+  if (args.entityName) params['entity-name'] = args.entityName;
+  if (args.entityType) params['entity-type'] = args.entityType;
+  if (args.timeZone) params['time-zone'] = args.timeZone;
+  if (args.descending !== undefined) params['descending'] = args.descending;
+  if (args.operationId) params['operation-id'] = args.operationId;
+  if (args.timestamp) params['timestamp'] = args.timestamp;
+  if (args.limit) params['limit'] = args.limit;
   return await ndbClient.get('/operations/short-info', params);
 }
 
@@ -954,48 +1008,55 @@ async function handleListAlerts(args: any) {
     resolved: args.resolved,
     timeInterval: args.timeInterval
   };
-  return await ndbClient.get('/alerts', params);
+  const apiResult = await ndbClient.get('/alerts', params);
+  // If the result has an 'entities' array, use it; otherwise, use the result directly
+  const alerts = Array.isArray(apiResult?.entities) ? apiResult.entities : apiResult;
+  // Reduced mapping (adapt to typical NDB alert fields)
+  let mapped = Array.isArray(alerts)
+    ? alerts.map((a: any) => ({
+        id: a.id,
+        name: a.name,
+        description: a.description,
+        status: a.status,
+        severity: a.severity,
+        type: a.type,
+        entityType: a.entityType,
+        entityId: a.entityId,
+        entityName: a.entityName,
+        dateCreated: a.dateCreated,
+        dateModified: a.dateModified,
+        resolved: a.resolved,
+        resolution: a.resolution,
+        acknowledged: a.acknowledged,
+        acknowledgedBy: a.acknowledgedBy,
+        acknowledgedAt: a.acknowledgedAt
+      }))
+    : [];
+  let filtered = advancedFilter(mapped, args.valueType, args.value);
+  return filtered;
 }
 
+// Get full details for a single alert by alertId
 async function handleGetAlert(args: any) {
   return await ndbClient.get(`/alerts/${args.alertId}`);
 }
 
-// List all NDB users with filtering on scalar properties using valueType/value
+// List all NDB users with advanced filtering using valueType/value
 async function handleListUsers(args: any) {
-  // Only pass supported params to the NDB API
   const users = await ndbClient.get('/users');
-  let filtered = users;
-  // Apply filtering using valueType and value on the result JSON
-  if (Array.isArray(filtered) && args.valueType && args.value) {
-    const keys = args.valueType.split(',').map((k: string) => k.trim());
-    const values = args.value.split(',').map((v: string) => v.trim());
-    filtered = filtered.filter((user: any) =>
-      keys.every((key: string, idx: number) => {
-        // Accept both top-level and nested keys
-        // For roles (array), do an exact match
-        if (key === 'roles' && Array.isArray(user[key])) {
-          return JSON.stringify(user[key]) === JSON.stringify(values[idx]);
-        }
-        // For booleans, allow string 'true'/'false' to match boolean values
-        if (typeof user[key] === 'boolean') {
-          return String(user[key]) === values[idx];
-        }
-        return user[key] == values[idx];
-      })
-    );
-  }
-  // Only keep the main properties as per the required schema
-  if (Array.isArray(filtered)) {
-    filtered = filtered.map((user: any) => ({
-      id: user.id,
-      username: user.username,
-      email: user.email,
-      isExternalAuth: user.isExternalAuth,
-      passwordExpired: user.passwordExpired,
-      roles: user.roles
-    }));
-  }
+  // Mapping réduit (garde les champs principaux)
+  let mapped = Array.isArray(users)
+    ? users.map((user: any) => ({
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        isExternalAuth: user.isExternalAuth,
+        passwordExpired: user.passwordExpired,
+        roles: user.roles
+      }))
+    : [];
+  // Filtrage avancé (supporte booléens, arrays, etc.)
+  let filtered = advancedFilter(mapped, args.valueType, args.value);
   return filtered;
 }
 

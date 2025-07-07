@@ -375,3 +375,95 @@ export function extractErrorMessage(error: any): string {
   
   return 'Unknown error occurred';
 }
+
+/**
+ * Advanced filtering utility for arrays of objects, supporting nested properties (e.g. versions.name, databases.length)
+ * Used by list_dbservers, list_profiles, and can be reused elsewhere.
+ *
+ * @param {Array} arr - Array of objects to filter
+ * @param {string} valueType - Comma-separated list of fields (e.g. "name,versions.length,versions.published")
+ * @param {string} value - Comma-separated list of values (e.g. "*prod*,>=2,true")
+ * @returns {Array} Filtered array
+ */
+export function advancedFilter(arr: any[], valueType?: string, value?: string): any[] {
+  if (!Array.isArray(arr) || !valueType || !value) return arr;
+  const keys = valueType.split(',').map((k: string) => k.trim());
+  const values = value.split(',').map((v: string) => v.trim());
+  return arr.filter((item: any) =>
+    keys.every((key: string, idx: number) => {
+      const val = values[idx];
+      // Special case: properties.<propertyName> means search in properties array for name=<propertyName> and compare value
+      if (key.startsWith('properties.') && key.split('.').length === 2) {
+        const propName = key.split('.')[1];
+        if (!Array.isArray(item.properties)) return false;
+        return item.properties.some((prop: any) => {
+          if (!prop.name || prop.name.toLowerCase() !== propName.toLowerCase()) return false;
+          const propVal = prop.value;
+          if (val.startsWith('!')) return String(propVal) !== val.substring(1);
+          if (val.startsWith('>=')) return propVal >= val.substring(2);
+          if (val.startsWith('<=')) return propVal <= val.substring(2);
+          if (val.startsWith('>')) return propVal > val.substring(1);
+          if (val.startsWith('<')) return propVal < val.substring(1);
+          if (val.startsWith('*') && val.endsWith('*')) {
+            const search = val.slice(1, -1).toLowerCase();
+            return String(propVal).toLowerCase().includes(search);
+          }
+          return String(propVal) === val;
+        });
+      }
+      // Nested filter for arrays (e.g. versions.*, databases.*)
+      if (key.includes('.')) {
+        const [arrayProp, ...rest] = key.split('.');
+        const nestedKey = rest.join('.');
+        const nestedArr = item[arrayProp];
+        if (!Array.isArray(nestedArr)) return false;
+        // Filter on array length
+        if (nestedKey === '' || nestedKey === 'length') {
+          const count = nestedArr.length;
+          if (val.startsWith('>=')) return count >= Number(val.substring(2));
+          if (val.startsWith('<=')) return count <= Number(val.substring(2));
+          if (val.startsWith('>')) return count > Number(val.substring(1));
+          if (val.startsWith('<')) return count < Number(val.substring(1));
+          if (val.startsWith('=')) return count === Number(val.substring(1));
+          return count === Number(val);
+        }
+        // Otherwise, filter on a property of at least one nested object
+        return nestedArr.some((nested: any) => {
+          if (val.startsWith('!')) return String(nested[nestedKey]) !== val.substring(1);
+          if (val.startsWith('>=')) return nested[nestedKey] >= val.substring(2);
+          if (val.startsWith('<=')) return nested[nestedKey] <= val.substring(2);
+          if (val.startsWith('>')) return nested[nestedKey] > val.substring(1);
+          if (val.startsWith('<')) return nested[nestedKey] < val.substring(1);
+          if (val.startsWith('*') && val.endsWith('*')) {
+            const search = val.slice(1, -1).toLowerCase();
+            return String(nested[nestedKey]).toLowerCase().includes(search);
+          }
+          return String(nested[nestedKey]) === val;
+        });
+      } else {
+        // Support filtering on array length with just the array property name (e.g. databases, versions)
+        if (Array.isArray(item[key])) {
+          const count = item[key].length;
+          if (val.startsWith('>=')) return count >= Number(val.substring(2));
+          if (val.startsWith('<=')) return count <= Number(val.substring(2));
+          if (val.startsWith('>')) return count > Number(val.substring(1));
+          if (val.startsWith('<')) return count < Number(val.substring(1));
+          if (val.startsWith('=')) return count === Number(val.substring(1));
+          return count === Number(val);
+        }
+        // Standard property
+        const itemVal = item[key];
+        if (val.startsWith('!')) return String(itemVal) !== val.substring(1);
+        if (val.startsWith('>=')) return itemVal >= val.substring(2);
+        if (val.startsWith('<=')) return itemVal <= val.substring(2);
+        if (val.startsWith('>')) return itemVal > val.substring(1);
+        if (val.startsWith('<')) return itemVal < val.substring(1);
+        if (val.startsWith('*') && val.endsWith('*')) {
+          const search = val.slice(1, -1).toLowerCase();
+          return String(itemVal).toLowerCase().includes(search);
+        }
+        return String(itemVal) === val;
+      }
+    })
+  );
+}

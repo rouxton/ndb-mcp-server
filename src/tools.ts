@@ -12,13 +12,13 @@ export const tools = [
     Use get_database tool to get detailed information about a specific database instance.
 
     **Available Filters (valueType/value pairs):**
-    - **name**: Database instance name (supports partial matching with *pattern*)
+    - **name**: Database instance name in NDB (supports partial matching with *pattern*)
     - **description**: Database instance description text
     - **ownerId**: User ID who owns the database instance (use list_users to resolve usernames)
     - **dateCreated/dateModified**: Date filters (use >YYYY-MM-DD, <YYYY-MM-DD for comparisons)
     - **clustered**: true/false - whether database instance is clustered
     - **eraCreated**: true/false - NDB-provisioned (greenfield) vs registered (brownfield)
-    - **databaseName**: Internal database instance name (often differs from instance name)
+    - **databaseName**: Database instance name on the VM (may differ from instance name)
     - **type**: Database engine type (postgres_database, oracle_database, sqlserver_database, mariadb_database, mysql_database, saphana_database, mongodb_database)
     - **status**: Operational status (READY=operational, ERA_DAEMON_UNREACHABLE=agent issues, PROVISIONING=in progress, FAILED=error state)
     - **dbserverLogicalClusterId**: Logical cluster hosting the database
@@ -60,10 +60,10 @@ inputSchema: {
   },
   {
     name: 'get_database',
-    description: `Get detailed information for a specific database. Returns comprehensive database details including configuration, status, cluster information, and associated resources.
+    description: `Get detailed (not filtered) information for a specific database. Returns comprehensive database details including configuration, status, cluster information, and associated resources.
 
     **Returned Information:**
-    - Database configuration and properties
+    - Database configuration and properties (properties are database engine specific, for instance, Oracle has properties about PDBs/CDBs configuration, PostgreSQL has properties about extensions, etc.)
     - Current operational status and health
     - Associated time machine and backup details (only timeMachineId if detailed=false)
     - Infrastructure details in the databaseNodes array of objects, which contains in turn a dbServers collection. 
@@ -370,19 +370,18 @@ inputSchema: {
     name: 'list_dbservers',
     description: `Get all database servers. You can include information about databases and/or clones hosted on the db server by using the loadDatabases or loadClones parameters.
     Filtering is done using valueType and value fields, which are used to filter the response sent by the NDB API, for flexible filtering.
-    You can filter by any of the following attribute names available in the dbserver object:
-    - id: dbserver id, string
-    - name: name of the dbserver, string
-    - description: description of the dbserver, string
-    - ipAddresses: array of IP addresses, string (partial match supported)
-    - fqdns: array of FQDNs, string (partial match supported)
-    - type: type of the dbserver, string
-    - status: current status of the dbserver (e.g. "READY", etc.)
-    - nxClusterId: Nutanix cluster ID, string
-    - databaseType: type of the database engine (postgres_database, oracle_database, etc.)
-    - dbserverClusterId: ID of the logical cluster
-    - databases: number of databases (use valueType = "databases" and value = ">0" for dbservers with at least one database)
-    - databases.<property>: filter on a property of at least one database (e.g. databases.status, etc.)
+    
+    **Available Filters (valueType/value pairs):**
+    - **name**: name of the dbserver VM
+    - **description**: description of the dbserver
+    - **ipAddresses**: array of IP addresses (partial match supported)
+    - **fqdns**: array of FQDNs (partial match supported)
+    - **status**: Operational status (UP=DbServer VM is up and running, DOWN=DbServer VM is down, PROVISIONING=in progress, FAILED=error state)
+    - **nxClusterId**: Nutanix cluster ID
+    - **databaseType**: type of the database engine (postgres_database, oracle_database, etc.)
+    - **dbserverClusterId**: ID of the logical cluster
+    - **databases**: number of databases (use valueType = "databases" and value = ">0" for dbservers with at least one database)
+    - **databases.<property>**: filter on a property of at least one database (e.g. databases.status, etc.)
 
     Examples:
     - To filter by dbserver engine type: valueType = "type", value = "postgres_database"
@@ -681,28 +680,35 @@ inputSchema: {
   // Time Machine Management
   {
     name: 'list_time_machines',
-    description: 'Get list of all time machines',
+    description: `Get list of all time machines. Returns a summarized list of time machines with key fields only.
+
+**Returned fields:**
+- id, name, description, databaseId, logDriveId, type, status, slaId, scheduleId, ownerId, dateCreated, dateModified, properties (array of {ref_id, name, value, secure, description}), zeroSla, slaSet, continuousRecoveryEnabled, snapshotableState
+
+**Advanced Filtering:**
+- You can use operators in value for advanced filtering: !value for negation, >value or <value for comparisons, and *value* for partial (substring) search.
+- Multiple filters: combine with comma-separated valueType/value pairs (e.g. valueType="status,type", value="READY,CONTINUOUS")
+- You can filter on the number of elements in an array property by using the property name (e.g. valueType="properties", value=">1" for time machines with more than one property)
+- You can filter on a property of a nested array by using dot notation (e.g. valueType="properties.name", value="*retention*")
+- Examples:
+  - Find all time machines in READY status: valueType="status", value="READY"
+  - Find time machines with more than one property: valueType="properties", value=">1"
+  - Find time machines with a property whose name contains 'retention': valueType="properties.name", value="*retention*"
+  - Find time machines not in CONTINUOUS type: valueType="type", value="!CONTINUOUS"
+  - Find time machines created after 2024-01-01: valueType="dateCreated", value=">2024-01-01"
+
+**Performance Note:** Always use specific filters to reduce result set size in large environments.
+`,
     inputSchema: {
       type: 'object',
       properties: {
         valueType: {
           type: 'string',
-          description: 'Filter type',
-          enum: ['id', 'name']
+          description: 'Comma-separated list of attribute names to filter on (e.g. "status", "type", "properties.name")',
         },
         value: {
           type: 'string',
-          description: 'Filter value'
-        },
-        loadDatabase: {
-          type: 'boolean',
-          description: 'Load associated database info',
-          default: false
-        },
-        loadClones: {
-          type: 'boolean',
-          description: 'Load associated clones',
-          default: false
+          description: 'Comma-separated list of values corresponding to valueType. Use operators: !value (not), >value/<value (comparison), *value* (contains).',
         }
       }
     }
@@ -886,14 +892,46 @@ inputSchema: {
   // Cluster Management
   {
     name: 'list_clusters',
-    description: 'Get list of all Nutanix clusters',
+    description: `Get list of all Nutanix clusters with advanced filtering and reduced schema mapping. Returns only the most relevant fields for each cluster.
+
+**Returned fields:**
+- id: string
+- name: string
+- uniqueName: string
+- ipAddresses: string[]
+- fqdns: string[]
+- description: string
+- cloudType: string
+- dateCreated: string
+- dateModified: string
+- ownerId: string
+- status: string
+- version: string
+- hypervisorType: string
+- hypervisorVersion: string
+
+**Advanced Filtering:**
+- Use valueType/value to filter the result set after mapping. Supports all returned fields, including array length (e.g. ipAddresses, fqdns).
+- Operators: !value (not), >value/<value (comparison), *value* (contains)
+- Multiple filters: combine with comma-separated valueType/value pairs
+- Examples:
+  - Find clusters with name containing 'prod': valueType="name", value="*prod*"
+  - Find clusters with more than one IP: valueType="ipAddresses", value=">1"
+  - Find clusters not in READY status: valueType="status", value="!READY"
+  - Find clusters created after 2024-01-01: valueType="dateCreated", value=">2024-01-01"
+
+**Performance Note:** Always use specific filters to reduce result set size in large environments.
+`,
     inputSchema: {
       type: 'object',
       properties: {
-        includeManagementServerInfo: {
-          type: 'boolean',
-          description: 'Include management server information',
-          default: false
+        valueType: {
+          type: 'string',
+          description: 'Comma-separated list of attribute names to filter on (e.g. "name", "status,cloudType")',
+        },
+        value: {
+          type: 'string',
+          description: 'Comma-separated list of values corresponding to valueType. Use operators: !value (not), >value/<value (comparison), *value* (contains).',
         }
       }
     }
@@ -927,7 +965,42 @@ inputSchema: {
   // Profile Management
   {
     name: 'list_profiles',
-    description: 'Get list of all profiles',
+    description: `Get a list of all profiles with advanced filtering options.
+
+**Profile types:**
+- **Software**: The image that will be used to create the database (e.g. a specific version of PostgreSQL, Oracle, etc.).
+- **Compute**: The resources that will be allocated to the database (CPU, RAM, etc.). Compute profiles are database engine agnostic, meaning they can be used for any database engine.
+- **Network**: The network configuration that will be applied to the database (VLAN, subnet, etc.).
+- **Database_Parameter**: The database parameters that will be applied to the database (init parameters, tuning, etc.).
+
+**API-side filtering parameters:**
+- **engine**: Filter by database engine (e.g. postgres_database, oracle_database, etc.)
+- **type**: Filter by profile type (Software, Compute, Network, Database_Parameter)
+
+These parameters are sent directly to the NDB API to reduce the result set before advanced filtering is applied.
+
+**Advanced Filtering (MCP server-side):**
+- Use valueType/value to filter the result set returned by the API before sending to the LLM.
+- Supports filtering on top-level profile fields and nested properties of versions (e.g. versions.name, versions.published, versions.length).
+- Operators: !value (not), >value/<value (comparison), *value* (contains)
+- Multiple filters: combine with comma-separated valueType/value pairs
+- Example: Find all user-defined PostgreSQL software profiles with at least 2 published versions: valueType="engineType,type,systemProfile,versions.length,versions.published", value="postgres_database,Software,false,>=2,true"
+
+**Available valueType fields:**
+- **id, name, description, owner, engineType, type, nxClusterId, dbVersion, systemProfile, dateCreated, dateModified** (top-level)
+- **versions.length**: Number of versions
+- **versions.<property>**: Any property of a version (e.g. versions.name, versions.published)
+
+**Returned fields:**
+- Only the following fields are included: id, name, description, dateCreated, dateModified, owner, engineType, type, nxClusterId, topology, dbVersion, systemProfile, assocDbServers, assocDatabases, latestVersion, latestVersionId, versions (with the same fields for each version).
+
+**Use Cases:**
+- List all available software or compute profiles for a given engine
+- Filter profiles by owner, type, or cluster
+- Search for profiles with specific naming patterns
+- Filter on the number or properties of versions (e.g. only profiles with published versions)
+- Get a concise overview of profile versions and their publication status
+`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -940,6 +1013,14 @@ inputSchema: {
           type: 'string',
           description: 'Filter by profile type',
           enum: ['Software', 'Compute', 'Network', 'Database_Parameter']
+        },
+        valueType: {
+          type: 'string',
+          description: 'Comma-separated list of fields to filter on (e.g. "name,type,systemProfile")'
+        },
+        value: {
+          type: 'string',
+          description: 'Comma-separated list of values to filter by (e.g. "*prod*,Software,false")'
         }
       }
     }
@@ -1006,26 +1087,62 @@ inputSchema: {
   // Operations and Monitoring
   {
     name: 'list_operations',
-    description: 'Get list of operations',
+    description: `Get list of operations (short info) with all supported filters from the NDB API.
+
+**Available parameters:**
+- dbserverId: Filter by database server ID
+- eraServer: Filter by era server (boolean)
+- ip: Filter by IP address
+- clientId: Filter by client ID
+- status: Filter by operation status
+- type: Filter by operation type
+- hideSubops: Hide sub-operations (boolean)
+- systemTriggered: Filter by system-triggered operations (boolean)
+- userTriggered: Filter by user-triggered operations (boolean)
+- scheduled: Filter by scheduled operations (boolean)
+- dateSubmitted: Filter by submission date (string)
+- fromTime: Filter by start time (string)
+- toTime: Filter by end time (string)
+- days: Number of days to look back (string)
+- entityId: Filter by entity ID
+- entityName: Filter by entity name
+- entityType: Filter by entity type
+- timeZone: Time zone for timestamps (default: UTC)
+- descending: Sort descending (boolean)
+- operationId: Filter by operation ID
+- timestamp: Filter by timestamp (string)
+- limit: Limit number of results (string)
+
+**Example usage:**
+- List all failed operations in the last 7 days: status="FAILED", days="7"
+- List operations for a specific database: entityId="<db-id>"
+- List only user-triggered operations: userTriggered=true
+`,
     inputSchema: {
       type: 'object',
       properties: {
-        days: {
-          type: 'string',
-          description: 'Number of days to look back'
-        },
-        entityId: {
-          type: 'string',
-          description: 'Filter by entity ID'
-        },
-        status: {
-          type: 'string',
-          description: 'Filter by operation status'
-        },
-        limit: {
-          type: 'string',
-          description: 'Limit number of results'
-        }
+        dbserverId: { type: 'string', description: 'Filter by database server ID' },
+        eraServer: { type: 'boolean', description: 'Filter by era server' },
+        ip: { type: 'string', description: 'Filter by IP address' },
+        clientId: { type: 'string', description: 'Filter by client ID' },
+        status: { type: 'string', description: 'Filter by operation status' },
+        type: { type: 'string', description: 'Filter by operation type' },
+        hideSubops: { type: 'boolean', description: 'Hide sub-operations' },
+        systemTriggered: { type: 'boolean', description: 'Filter by system-triggered operations' },
+        userTriggered: { type: 'boolean', description: 'Filter by user-triggered operations' },
+        scheduled: { type: 'boolean', description: 'Filter by scheduled operations' },
+        dateSubmitted: { type: 'string', description: 'Filter by submission date' },
+        fromTime: { type: 'string', description: 'Filter by start time' },
+        toTime: { type: 'string', description: 'Filter by end time' },
+        days: { type: 'string', description: 'Number of days to look back' },
+        entityId: { type: 'string', description: 'Filter by entity ID' },
+        entityName: { type: 'string', description: 'Filter by entity name' },
+        entityType: { type: 'string', description: 'Filter by entity type' },
+        timeZone: { type: 'string', description: 'Time zone for timestamps (default: UTC)' },
+        descending: { type: 'boolean', description: 'Sort descending' },
+        operationId: { type: 'string', description: 'Filter by operation ID' },
+        timestamp: { type: 'string', description: 'Filter by timestamp' },
+        limit: { type: 'string', description: 'Limit number of results' }
       }
     }
   },
@@ -1052,18 +1169,28 @@ inputSchema: {
   // Alerts
   {
     name: 'list_alerts',
-    description: 'Get list of all alerts',
+    description: `Get list of all alerts with advanced filtering options. Returns a reduced set of fields for each alert.
+
+**API-side filters:**
+- resolved: Filter by resolution status
+- timeInterval: Time interval filter
+
+**Advanced Filtering (MCP server-side):**
+- Use valueType/value to filter the result set after mapping. Supports all returned fields, including status, severity, type, entityType, entityId, entityName, dateCreated, resolved, acknowledged, etc.
+- Operators: !value (not), >value/<value (comparison), *value* (contains)
+- Multiple filters: combine with comma-separated valueType/value pairs
+- Examples:
+  - Find unresolved critical alerts: valueType="status,severity,resolved", value="OPEN,CRITICAL,false"
+  - Find alerts for a specific entity: valueType="entityId", value="<id>"
+  - Find alerts acknowledged by a user: valueType="acknowledgedBy", value="*admin*"
+`,
     inputSchema: {
       type: 'object',
       properties: {
-        resolved: {
-          type: 'string',
-          description: 'Filter by resolution status'
-        },
-        timeInterval: {
-          type: 'string',
-          description: 'Time interval filter'
-        }
+        resolved: { type: 'string', description: 'Filter by resolution status' },
+        timeInterval: { type: 'string', description: 'Time interval filter' },
+        valueType: { type: 'string', description: 'Comma-separated list of attribute names to filter on (e.g. "status,severity")' },
+        value: { type: 'string', description: 'Comma-separated list of values corresponding to valueType' }
       }
     }
   },

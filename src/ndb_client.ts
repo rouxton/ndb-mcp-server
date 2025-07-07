@@ -145,20 +145,23 @@ export class NDBClient {
  */
 export function createNDBClient(): NDBClient {
   const baseUrl = process.env.NDB_BASE_URL;
+  const token = process.env.NDB_TOKEN;
   const username = process.env.NDB_USERNAME;
   const password = process.env.NDB_PASSWORD;
   const timeout = process.env.NDB_TIMEOUT ? parseInt(process.env.NDB_TIMEOUT) : 30000;
   const verifySsl = process.env.NDB_VERIFY_SSL !== 'false';
 
-  if (!baseUrl || !username || !password) {
-    throw new Error('Missing required environment variables: NDB_BASE_URL, NDB_USERNAME, NDB_PASSWORD');
+  if (!baseUrl) {
+    throw new Error('Missing required environment variable: NDB_BASE_URL');
   }
 
-  return new NDBClient({
-    baseUrl,
-    username,
-    password,
-    timeout,
-    verifySsl
-  });
+  if (token) {
+    // Token-based authentication
+    return new NDBClient({ baseUrl, token, timeout, verifySsl });
+  } else if (username && password) {
+    // Basic authentication
+    return new NDBClient({ baseUrl, username, password, timeout, verifySsl });
+  } else {
+    throw new Error('Missing required environment variables: NDB_TOKEN or (NDB_USERNAME and NDB_PASSWORD)');
+  }
 }
