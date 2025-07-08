@@ -1,233 +1,178 @@
 # NDB MCP Server
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](https://nodejs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue)](https://www.typescriptlang.org/)
+A Model Context Protocol server that enables Claude Desktop and other MCP-compatible AI assistants to manage Nutanix Database Service (NDB) environments through natural language.
 
-A comprehensive Model Context Protocol (MCP) server for **Nutanix Database Service (NDB)**. This server enables Claude Desktop and other MCP-compatible LLMs to manage databases, clones, snapshots, and infrastructure through natural language interactions.
+Transform complex database operations into simple conversations: *"Create a clone of the sales database for testing"* or *"Show me all databases with backup issues"*.
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
-- Node.js 18.0.0 or later
-- Access to a Nutanix NDB environment
-- Valid NDB credentials with appropriate permissions
+- **Node.js** 18.0.0 or later
+- **NDB Environment** with API access
+- **Valid credentials** with appropriate permissions
 
 ### Installation
 
-1. **Clone the repository:**
+1. **Clone and setup**:
    ```bash
    git clone https://github.com/rouxton/ndb-mcp-server.git
    cd ndb-mcp-server
-   ```
-
-2. **Run the setup script:**
-   ```bash
-   # For Unix/Linux/macOS
-   chmod +x scripts/setup.sh
-   ./scripts/setup.sh
    
-   # For Windows PowerShell
-   powershell -ExecutionPolicy Bypass -File scripts/setup.ps1
+   # Run the automated setup script
+   ./scripts/setup.sh                                    # Unix/Linux/macOS
+   # or
+   PowerShell -ExecutionPolicy Bypass -File scripts/setup.ps1  # Windows PowerShell
    ```
+   
+   The setup script handles everything: dependencies, building, configuration, testing, and prepares for Claude Desktop integration.
 
-4. **Build and test:**
+2. **Configure Claude Desktop**:
    ```bash
-   npm run build
-   npm start
+   ./scripts/configure-claude.sh                      # Unix/Linux/macOS
+   # or  
+   .\scripts\configure-claude.ps1                    # Windows PowerShell
    ```
 
+3. **Start using**:
+   - Restart Claude Desktop to load the new configuration
+   - Try asking Claude: "List all databases in NDB"
+   
+   **Manual configuration** (if needed):
+   ```bash
+   npm run configure         # Interactive configuration wizard
+   npm run test:connection   # Test NDB connectivity
+   npm run test:mcp         # Test MCP functionality
+   ```
 
-## Authentication & Environment Setup
+### Use with Claude Desktop
 
-The NDB MCP Server supports both basic authentication and token-based authentication for connecting to the Nutanix Database Service (NDB) API.
+The setup script automatically configures Claude Desktop. If you need manual configuration, add to your Claude Desktop settings:
 
-### Interactive Configuration
-
-You can use the following command to interactively configure your environment and generate a valid `.env` file:
-
-```bash
-npm run configure
+```json
+{
+  "mcpServers": {
+    "ndb": {
+      "command": "node",
+      "args": ["/path/to/ndb-mcp-server/dist/index.js"],
+      "env": {
+        "NDB_BASE_URL": "your-ndb-url",
+        "NDB_USERNAME": "your-username"
+      }
+    }
+  }
+}
 ```
 
-This tool will prompt for all required connection and authentication details, including the option to generate and store a token automatically if you select token-based authentication.
+## Example Conversations
 
-See [docs/configuration.md](./docs/configuration.md) for details and examples.
+🗣️ **"Show me all PostgreSQL databases in production"**
+📋 Lists all PostgreSQL databases with production status and health indicators
 
-## 🧪 Testing
+🗣️ **"Create a clone of the customer-data database for testing"**
+🔄 Creates a fresh clone using the latest snapshot, ready for development use
 
-Before integrating with Claude Desktop, test your server directly:
+🗣️ **"Take a snapshot of the critical-app database"**
+📸 Creates an immediate backup snapshot with automatic retention policies
 
-```bash
-# Test NDB connectivity
-npm run test:connection
+🗣️ **"Check which time machines had backup failures"**
+🚨 Analyzes time machine health and reports any backup issues
 
-# Test MCP functionality
-npm run test:mcp
+## What You Can Do
 
-# Interactive testing with web interface
-npm run test:inspector
+| **Databases** | **Clones** | **Backups** | **Infrastructure** |
+|---------------|------------|-------------|-------------------|
+| List & monitor | Create & refresh | Snapshots & recovery | Cluster monitoring |
+| Provision new | Manage lifecycle | Time machine status | Server health |
+| Register existing | Resource allocation | Retention policies | Alerts & operations |
+| Update properties | Cleanup & removal | Health monitoring | Capacity planning |
 
-# Run all tests
-npm run test:all
-```
+## Documentation
 
-For comprehensive testing documentation, see **[Testing Guide](docs/testing.md)**.
+📖 **[Complete Setup Guide](docs/setup-and-configuration.md)** - Detailed installation, configuration, and security
 
-## 🎯 Features
+🔧 **[Tools Reference](docs/tools-reference.md)** - Complete documentation of all available tools
 
-### Database Management
-- 📋 **List and monitor** all databases across your NDB environment
-- 🔧 **Provision new databases** with custom configurations
-- 📝 **Register existing databases** into NDB management
-- ✏️ **Update database properties** and lifecycle settings
-- 🗑️ **Deregister databases** with cleanup options
+💡 **[Usage Examples](docs/usage-examples.md)** - Real-world scenarios and workflows
 
-### Clone Operations
-- 🔄 **Create database clones** from snapshots or point-in-time
-- 🔃 **Refresh clones** with latest production data
-- 📊 **Manage clone lifecycle** and resource allocation
-- 🧹 **Cleanup and remove** unnecessary clones
 
-### Time Machine & Backup
-- ⏰ **Monitor time machine status** and health
-- ⏸️ **Pause and resume** time machines for maintenance
-- 📈 **View recovery capabilities** and timeline analysis
-- 🔍 **Health monitoring** with gap analysis
+## Architecture Overview
 
-### Snapshot Management
-- 📸 **Take manual snapshots** with custom retention
-- 📅 **Schedule automated snapshots** via SLA policies
-- 🗂️ **List and filter snapshots** by date, type, or database
-- 🧹 **Delete expired snapshots** to free storage
-
-### Infrastructure Monitoring
-- 🖥️ **Database server management** and health monitoring
-- 🏗️ **Cluster resource utilization** and capacity planning
-- 📊 **Profile management** (Software, Compute, Network)
-- 🚨 **Alert monitoring** and operation tracking
-
-## 💬 Usage Examples
-
-Once configured, interact with your NDB environment using natural language:
+### High-Level Architecture
 
 ```
-🗣️ "Show me all PostgreSQL databases in production"
-🗣️ "Create a clone of the sales database for testing"  
-🗣️ "Take a snapshot of the critical app database"
-🗣️ "List all failed operations from yesterday"
-🗣️ "Provision a new MySQL database with medium compute"
-🗣️ "Check the backup status of all time machines"
-🗣️ "Show cluster resource utilization"
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Claude        │    │   NDB MCP       │    │   Nutanix       │
+│   Desktop       │◄──►│   Server        │◄──►│   NDB           │
+│                 │    │                 │    │                 │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+        │                        │                        │
+        │                        │                        │
+    MCP Protocol           NDB REST API              Database
+    (stdio/websocket)         (HTTP/HTTPS)           Operations
 ```
 
-## 📚 Documentation
+### Core Components
 
-- 📖 **[Installation Guide](docs/installation.md)** - Detailed setup instructions
-- ⚙️ **[Configuration Guide](docs/configuration.md)** - Environment and security setup
-- 💡 **[Usage Examples](docs/usage-examples.md)** - Comprehensive usage scenarios
-- 🧪 **[Testing Guide](docs/testing.md)** - Complete testing documentation
-- 🔧 **[Troubleshooting](docs/troubleshooting.md)** - Common issues and solutions
-- 🔒 **[Security Guide](docs/security.md)** - Security best practices
-- 📝 **[API Reference](docs/api-reference.md)** - Complete tool documentation
+1. **MCP Server Core** (`src/index.ts`)
+   - Protocol handling and tool registration
+   - Request/response management
+   - Error handling and logging
 
-## 🛠️ Available Tools
+2. **NDB Client** (`src/ndb-client.ts`)
+   - HTTP client for NDB API
+   - Authentication management
+   - Request retries and error handling
 
-### Core Database Operations
-| Tool | Description |
-|------|-------------|
-| `list_databases` | Get all databases with filtering options |
-| `get_database` | Get specific database details |
-| `provision_database` | Create a new database |
-| `register_database` | Register existing database |
-| `update_database` | Update database properties |
-| `deregister_database` | Remove database from NDB |
+3. **Tool Definitions** (`src/tools.ts`)
+   - 30+ tool implementations
+   - Parameter validation
+   - Response formatting
 
-### Clone & Snapshot Management
-| Tool | Description |
-|------|-------------|
-| `list_clones` | Get all database clones |
-| `create_clone` | Create new clone from snapshot/PITR |
-| `refresh_clone` | Refresh clone with latest data |
-| `delete_clone` | Remove clone and resources |
-| `list_snapshots` | Get all snapshots with filtering |
-| `take_snapshot` | Create manual snapshot |
-| `delete_snapshot` | Remove snapshot |
+4. **Type Definitions** (`src/types.ts`)
+   - TypeScript interfaces
+   - API response types
+   - Configuration schemas
 
-### Infrastructure & Monitoring
-| Tool | Description |
-|------|-------------|
-| `list_clusters` | Get all Nutanix clusters |
-| `list_dbservers` | Get all database servers |
-| `list_time_machines` | Get all time machines |
-| `get_time_machine_capability` | Check recovery capabilities |
-| `list_operations` | Get operation history |
-| `list_alerts` | Get system alerts |
+5. **Utilities** (`src/utils.ts`)
+   - Helper functions
+   - Data transformations
+   - Validation logic
 
-*See [API Reference](docs/api-reference.md) for complete tool documentation.*
+## Project Structure
 
-## 🔧 Development
-
-### Building from Source
-```bash
-git clone https://github.com/rouxton/ndb-mcp-server.git
-cd ndb-mcp-server
-npm install
-npm run build
+```
+ndb-mcp-server/
+├── src/                     # Source code
+│   ├── index.ts            # Main server entry point
+│   ├── ndb-client.ts       # NDB API client
+│   ├── tools.ts            # MCP tool implementations
+│   ├── types.ts            # TypeScript type definitions
+│   └── utils.ts            # Utility functions
+├── docs/                    # Documentation
+├── examples/                # Usage examples
+├── scripts/                 # Setup and utility scripts
+├── tests/                   # Test files (when implemented)
+├── dist/                    # Compiled JavaScript (build output)
+├── .env.example            # Environment template
+├── package.json            # Dependencies and scripts
+├── tsconfig.json           # TypeScript configuration
+└── README.md               # Project overview
 ```
 
-### Development Mode
-```bash
-npm run dev  # Watch mode with auto-rebuild
-```
 
-### Testing Connection
-```bash
-node scripts/test-connection.js
-```
-
-## 🤝 Contributing
-
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📋 Requirements
-
-- **Node.js**: 18.0.0 or later
-- **NDB Version**: 2.4+ (API v0.9)
-- **Supported Databases**: Oracle, PostgreSQL, SQL Server, MySQL, MariaDB, SAP HANA, MongoDB
-- **Operating Systems**: macOS, Windows, Linux
-
-## 🐛 Issues & Support
+## Support & Contributing
 
 - 🐞 **Bug Reports**: [Create an issue](https://github.com/rouxton/ndb-mcp-server/issues/new?template=bug_report.md)
 - 💡 **Feature Requests**: [Request a feature](https://github.com/rouxton/ndb-mcp-server/issues/new?template=feature_request.md)
 - ❓ **Questions**: [Get support](https://github.com/rouxton/ndb-mcp-server/issues/new?template=support.md)
-- 📖 **Documentation**: Check our [troubleshooting guide](docs/troubleshooting.md)
+- 🤝 **Contributing**: See our [development guide](docs/development.md)
 
-## 📄 License
+## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- [Nutanix](https://www.nutanix.com/) for the powerful NDB platform
-- [Anthropic](https://www.anthropic.com/) for Claude and the MCP protocol
-- The open source community for inspiration and best practices
-
-## 🔗 Related Projects
-
-- [Model Context Protocol](https://github.com/modelcontextprotocol) - The MCP specification and SDK
-- [Claude Desktop](https://claude.ai/desktop) - Anthropic's desktop application
-- [Nutanix Developer Portal](https://www.nutanix.dev/) - NDB API documentation
+MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
 **Ready to transform your database management with AI?** 🚀
 
-[Get Started](docs/installation.md) • [View Examples](docs/usage-examples.md) • [Join Discussions](https://github.com/rouxton/ndb-mcp-server/discussions)
+Start with the [setup guide](docs/setup-and-configuration.md) for detailed instructions.
