@@ -411,6 +411,25 @@ export function advancedFilter(arr: any[], valueType?: string, value?: string): 
           return String(propVal) === val;
         });
       }
+      // Special case: tags.<tagName> means search in tags array for tagName=<tagName> and compare value
+      if (key.startsWith('tags.') && key.split('.').length === 2) {
+        const tagName = key.split('.')[1];
+        if (!Array.isArray(item.tags)) return false;
+        return item.tags.some((tag: any) => {
+          if (!tag.tagName || tag.tagName.toLowerCase() !== tagName.toLowerCase()) return false;
+          const tagVal = tag.value;
+          if (val.startsWith('!')) return String(tagVal) !== val.substring(1);
+          if (val.startsWith('>=')) return tagVal >= val.substring(2);
+          if (val.startsWith('<=')) return tagVal <= val.substring(2);
+          if (val.startsWith('>')) return tagVal > val.substring(1);
+          if (val.startsWith('<')) return tagVal < val.substring(1);
+          if (val.startsWith('*') && val.endsWith('*')) {
+            const search = val.slice(1, -1).toLowerCase();
+            return String(tagVal).toLowerCase().includes(search);
+          }
+          return String(tagVal) === val;
+        });
+      }
       // Nested filter for arrays (e.g. versions.*, databases.*)
       if (key.includes('.')) {
         const [arrayProp, ...rest] = key.split('.');

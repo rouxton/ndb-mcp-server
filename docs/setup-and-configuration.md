@@ -272,72 +272,6 @@ NDB_TIMEOUT=45000
 DEBUG=ndb:warn,ndb:error
 ```
 
-### Claude Desktop Multi-Environment Configuration
-
-#### Method 1: Multiple MCP Server Entries
-
-Configure multiple NDB servers in Claude Desktop to switch between environments:
-
-**Claude Desktop Configuration:**
-```json
-{
-  "mcpServers": {
-    "ndb-dev": {
-      "command": "node",
-      "args": ["/absolute/path/to/ndb-mcp-server/dist/index.js"],
-      "env": {
-        "NODE_ENV": "development",
-        "NDB_BASE_URL": "https://ndb-dev.company.local",
-        "NDB_USERNAME": "dev-automation", 
-        "NDB_PASSWORD": "dev-password",
-        "NDB_VERIFY_SSL": "false",
-        "DEBUG": "ndb:*"
-      }
-    },
-    "ndb-staging": {
-      "command": "node",
-      "args": ["/absolute/path/to/ndb-mcp-server/dist/index.js"],
-      "env": {
-        "NODE_ENV": "staging",
-        "NDB_BASE_URL": "https://ndb-staging.company.com",
-        "NDB_USERNAME": "staging-user",
-        "NDB_PASSWORD": "staging-password",
-        "NDB_VERIFY_SSL": "true"
-      }
-    },
-    "ndb-prod": {
-      "command": "node",
-      "args": ["/absolute/path/to/ndb-mcp-server/dist/index.js"],
-      "env": {
-        "NODE_ENV": "production",
-        "NDB_BASE_URL": "https://ndb-prod.company.com",
-        "NDB_TOKEN": "your-production-api-token",
-        "NDB_VERIFY_SSL": "true",
-        "DEBUG": "ndb:error"
-      }
-    }
-  }
-}
-```
-
-#### Method 2: Environment File References
-
-Alternatively, reference your environment files directly:
-
-```json
-{
-  "mcpServers": {
-    "ndb-dev": {
-      "command": "bash",
-      "args": ["-c", "cd /absolute/path/to/ndb-mcp-server && cp .env.dev .env && node dist/index.js"]
-    },
-    "ndb-prod": {
-      "command": "bash", 
-      "args": ["-c", "cd /absolute/path/to/ndb-mcp-server && cp .env.prod .env && node dist/index.js"]
-    }
-  }
-}
-```
 
 ### Usage Patterns
 
@@ -557,13 +491,9 @@ NDB_BASE_URL=https://your-ndb-server.company.com
 NDB_TOKEN=your-api-token
 ```
 
-**To generate a token:**
-1. Log into NDB web interface
-2. Go to **Administration** → **Users**
-3. Select your user → **Generate API Token**
-4. Copy the token to your configuration
+**API is the only native way to generate a token so far (no options in the GUI)**
 
-The interactive `npm run configure` script can also generate tokens automatically.
+The interactive `npm run configure` script can generate tokens automatically.
 
 #### 2. Basic Authentication
 
@@ -629,61 +559,6 @@ echo ".env" >> .gitignore
 - Consider secrets management systems (HashiCorp Vault, AWS Secrets Manager)
 - Implement credential rotation policies
 
-## Claude Desktop Integration
-
-### Automatic Configuration
-
-The setup script automatically configures Claude Desktop. The configuration is added to:
-
-- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- **Windows**: `%APPDATA%/Claude/claude_desktop_config.json`
-- **Linux**: `~/.config/Claude/claude_desktop_config.json`
-
-### Manual Configuration
-
-If automatic configuration fails, manually edit your Claude Desktop configuration:
-
-```json
-{
-  "mcpServers": {
-    "ndb": {
-      "command": "node",
-      "args": ["/absolute/path/to/ndb-mcp-server/dist/index.js"],
-      "env": {
-        "NDB_BASE_URL": "https://your-ndb-server.company.com",
-        "NDB_USERNAME": "your-username",
-        "NDB_PASSWORD": "your-password"
-      }
-    }
-  }
-}
-```
-
-**Important Notes:**
-- Use absolute paths for the command and args
-- Include all required environment variables
-- Restart Claude Desktop after configuration changes
-- Test with `npm run test:mcp` before expecting it to work in Claude
-
-#### Advanced Configuration
-
-**With SSL verification disabled:**
-```json
-{
-  "mcpServers": {
-    "ndb": {
-      "command": "node",
-      "args": ["/absolute/path/to/ndb-mcp-server/dist/index.js"],
-      "env": {
-        "NDB_BASE_URL": "https://your-ndb-server.company.com",
-        "NDB_TOKEN": "your-api-token",
-        "NDB_VERIFY_SSL": "false",
-        "DEBUG": "ndb:*"
-      }
-    }
-  }
-}
-```
 
 ## Testing & Validation
 
@@ -818,13 +693,6 @@ NDB_VERIFY_SSL=false
 # Add CA certificate to system trust store
 # or configure proper SSL certificates on NDB server
 ```
-
-#### Claude Desktop Not Finding Server
-**Solutions:**
-- Verify absolute paths in Claude configuration
-- Check that `dist/index.js` exists (`npm run build`)
-- Restart Claude Desktop after configuration changes
-- Test MCP server independently: `npm run test:mcp`
 
 #### Permission Denied
 ```bash

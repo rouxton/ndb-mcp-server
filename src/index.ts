@@ -38,6 +38,7 @@ const server = new Server(
     - Combine multiple filters in the same query to narrow down the results.
     - If the request fails, never try to fall back to a more generic tool, always try to fix the request by providing the missing parameters or correcting the syntax.
     - This MCP server does not provide tools to configure NDB itself, such as creating users or configuring profiles. It is focused on database management, clones, snapshots, and infrastructure operations. Configure NDB using the official NDB UI or CLI.
+    - Any request involving mass action (creating or deleting several databases, servers, clones, etc.) should be avoided to prevent accidental data loss or service disruption.
 
     `,
   }
@@ -215,7 +216,14 @@ async function handleListDatabases(args: any) {
         databaseStatus: db.databaseStatus,
         dbserverLogicalClusterId: db.dbserverLogicalClusterId,
         timeMachineId: db.timeMachineId,
-        timeZone: db.timeZone
+        timeZone: db.timeZone,
+        tags: Array.isArray(db.tags) ? db.tags.map((t: any) => ({
+          tagId: t.tagId,
+          entityId: t.entityId,
+          entityType: t.entityType,
+          value: t.value,
+          tagName: t.tagName
+        })) : []
       }))
     : [];
   let filtered = advancedFilter(mapped, args.valueType, args.value);
@@ -531,7 +539,7 @@ async function handleListDbservers(args: any) {
     'load-clones': args.loadClones
   };
   const fullList = await ndbClient.get('/dbservers', params);
-  // Mapping d'abord, puis filtrage avancé
+  // Map first, then apply advanced filtering
   let mapped = Array.isArray(fullList)
     ? fullList.map((srv: any) => {
         const mapped: any = {
@@ -549,7 +557,14 @@ async function handleListDbservers(args: any) {
           eraVersion: srv.eraVersion,
           ownerId: srv.ownerId,
           dateCreated: srv.dateCreated,
-          dateModified: srv.dateModified
+          dateModified: srv.dateModified,
+          tags: Array.isArray(srv.tags) ? srv.tags.map((t: any) => ({
+            tagId: t.tagId,
+            entityId: t.entityId,
+            entityType: t.entityType,
+            value: t.value,
+            tagName: t.tagName
+          })) : []
         };
         if (args.loadDatabases !== false || args.loadClones !== false) {
           mapped.databases = Array.isArray(srv.databases)
@@ -568,7 +583,14 @@ async function handleListDbservers(args: any) {
                 dbserverLogicalClusterId: db.dbserverLogicalClusterId,
                 timeMachineId: db.timeMachineId,
                 parentTimeMachineId: db.parentTimeMachineId,
-                timeZone: db.timeZone
+                timeZone: db.timeZone,
+                tags: Array.isArray(db.tags) ? db.tags.map((t: any) => ({
+                  tagId: t.tagId,
+                  entityId: t.entityId,
+                  entityType: t.entityType,
+                  value: t.value,
+                  tagName: t.tagName
+                })) : []
               }))
             : [];
         }
@@ -606,7 +628,7 @@ async function handleRegisterDbserver(args: any) {
 async function handleListClones(args: any) {
   // Get all clones from NDB
   const allClones = await ndbClient.get('/clones', null);
-  // Mapping d'abord, puis filtrage avancé
+  // Map first, then apply advanced filtering
   let mapped = Array.isArray(allClones)
     ? allClones.map((clone: any) => ({
         id: clone.id,
@@ -621,7 +643,14 @@ async function handleListClones(args: any) {
         dbserverLogicalClusterId: clone.dbserverLogicalClusterId,
         timeMachineId: clone.timeMachineId,
         parentTimeMachineId: clone.parentTimeMachineId,
-        timeZone: clone.timeZone
+        timeZone: clone.timeZone,
+        tags: Array.isArray(clone.tags) ? clone.tags.map((t: any) => ({
+          tagId: t.tagId,
+          entityId: t.entityId,
+          entityType: t.entityType,
+          value: t.value,
+          tagName: t.tagName
+        })) : []
       }))
     : [];
   let filtered = advancedFilter(mapped, args.valueType, args.value);
@@ -702,7 +731,14 @@ async function handleListTimeMachines(args: any) {
         zeroSla: tm.zeroSla ?? false,
         slaSet: tm.slaSet ?? false,
         continuousRecoveryEnabled: tm.continuousRecoveryEnabled ?? false,
-        snapshotableState: tm.snapshotableState ?? false
+        snapshotableState: tm.snapshotableState ?? false,
+        tags: Array.isArray(tm.tags) ? tm.tags.map((t: any) => ({
+          tagId: t.tagId,
+          entityId: t.entityId,
+          entityType: t.entityType,
+          value: t.value,
+          tagName: t.tagName
+        })) : []
       }))
     : [];
   let filtered = advancedFilter(mapped, args.valueType, args.value);
@@ -803,7 +839,14 @@ async function handleListSnapshots(args: any) {
         snapshotTimeStamp: s.snapshotTimeStamp,
         snapshotSize: s.snapshotSize,
         fromTimeStamp: s.fromTimeStamp,
-        toTimeStamp: s.toTimeStamp
+        toTimeStamp: s.toTimeStamp,
+        tags: Array.isArray(s.tags) ? s.tags.map((t: any) => ({
+          tagId: t.tagId,
+          entityId: t.entityId,
+          entityType: t.entityType,
+          value: t.value,
+          tagName: t.tagName
+        })) : []
       }))
     : [];
   // Only local advanced filtering on valueType not supported by the API
