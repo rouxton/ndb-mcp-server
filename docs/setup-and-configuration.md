@@ -1,6 +1,6 @@
 # Setup and Configuration Guide
 
-Complete installation and configuration guide for the NDB MCP Server.
+Complete installation, configuration, and security guide for the NDB MCP Server.
 
 ## Table of Contents
 
@@ -9,6 +9,7 @@ Complete installation and configuration guide for the NDB MCP Server.
 - [Configuration](#configuration)
 - [Multi-Environment Setup](#multi-environment-setup)
 - [Authentication & Security](#authentication--security)
+- [Claude Desktop Integration](#claude-desktop-integration)
 - [Testing & Validation](#testing--validation)
 - [Troubleshooting Setup](#troubleshooting-setup)
 
@@ -93,7 +94,6 @@ The automated setup performs these steps in sequence:
    - Displays next steps for Claude Desktop integration
    - Shows documentation links and useful commands
 
-**Note:** The setup script focuses on the core installation and testing. Claude Desktop integration is handled separately with dedicated scripts.
 
 #### Setup Script Features
 
@@ -134,15 +134,6 @@ chmod +x scripts/setup.sh
 # If you get execution policy errors
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 scripts/setup.ps1
-```
-
-**Setup Script Fails:**
-```bash
-# Run individual steps manually
-npm install              # Install dependencies
-npm run build           # Build TypeScript
-npm run configure       # Configure environment
-npm run test:connection # Test NDB connectivity
 ```
 
 ### Method 2: Manual Installation
@@ -223,7 +214,7 @@ DEBUG=ndb:*
 
 ## Multi-Environment Setup
 
-The NDB MCP Server supports managing multiple NDB environments (development, staging, production) simultaneously. This allows you to work with different NDB instances by maintaining separate configuration files.
+The NDB MCP Server supports managing multiple NDB environments (development, staging, production) simultaneously. This allows you to work with different NDB instances through dedicated Claude Desktop configurations.
 
 ### Environment-Specific Configuration
 
@@ -281,6 +272,99 @@ NDB_TIMEOUT=45000
 DEBUG=ndb:warn,ndb:error
 ```
 
+### Claude Desktop Multi-Environment Configuration
+
+#### Method 1: Multiple MCP Server Entries
+
+Configure multiple NDB servers in Claude Desktop to switch between environments:
+
+**Claude Desktop Configuration:**
+```json
+{
+  "mcpServers": {
+    "ndb-dev": {
+      "command": "node",
+      "args": ["/absolute/path/to/ndb-mcp-server/dist/index.js"],
+      "env": {
+        "NODE_ENV": "development",
+        "NDB_BASE_URL": "https://ndb-dev.company.local",
+        "NDB_USERNAME": "dev-automation", 
+        "NDB_PASSWORD": "dev-password",
+        "NDB_VERIFY_SSL": "false",
+        "DEBUG": "ndb:*"
+      }
+    },
+    "ndb-staging": {
+      "command": "node",
+      "args": ["/absolute/path/to/ndb-mcp-server/dist/index.js"],
+      "env": {
+        "NODE_ENV": "staging",
+        "NDB_BASE_URL": "https://ndb-staging.company.com",
+        "NDB_USERNAME": "staging-user",
+        "NDB_PASSWORD": "staging-password",
+        "NDB_VERIFY_SSL": "true"
+      }
+    },
+    "ndb-prod": {
+      "command": "node",
+      "args": ["/absolute/path/to/ndb-mcp-server/dist/index.js"],
+      "env": {
+        "NODE_ENV": "production",
+        "NDB_BASE_URL": "https://ndb-prod.company.com",
+        "NDB_TOKEN": "your-production-api-token",
+        "NDB_VERIFY_SSL": "true",
+        "DEBUG": "ndb:error"
+      }
+    }
+  }
+}
+```
+
+#### Method 2: Environment File References
+
+Alternatively, reference your environment files directly:
+
+```json
+{
+  "mcpServers": {
+    "ndb-dev": {
+      "command": "bash",
+      "args": ["-c", "cd /absolute/path/to/ndb-mcp-server && cp .env.dev .env && node dist/index.js"]
+    },
+    "ndb-prod": {
+      "command": "bash", 
+      "args": ["-c", "cd /absolute/path/to/ndb-mcp-server && cp .env.prod .env && node dist/index.js"]
+    }
+  }
+}
+```
+
+### Usage Patterns
+
+#### Environment-Specific Conversations
+
+Once configured, you can specify which environment to use in your conversations:
+
+**Development Workflow:**
+```
+🗣️ "Using ndb-dev, show me all test databases"
+🗣️ "Create a clone of customer-data in the dev environment"
+🗣️ "List failed operations in development from yesterday"
+```
+
+**Production Support:**
+```
+🗣️ "Using ndb-prod, check backup status of critical databases"
+🗣️ "Show production database resource utilization"
+🗣️ "Take a snapshot of sales-db before the upgrade"
+```
+
+**Cross-Environment Analysis:**
+```
+🗣️ "Compare database counts between ndb-dev and ndb-prod"
+🗣️ "Show me staging databases that don't exist in production"
+```
+
 ### Testing Multi-Environment Setup
 
 #### Validate Each Environment
@@ -307,6 +391,15 @@ NODE_ENV=development npm run test:connection
 NODE_ENV=production npm run test:connection
 NODE_ENV=staging npm run test:connection
 ```
+
+#### Claude Desktop Integration Testing
+
+After configuring multiple environments:
+
+1. **Restart Claude Desktop** to load new configuration
+2. **Test each environment** by asking Claude to list databases
+3. **Verify isolation** by checking that operations target the correct environment
+4. **Test error handling** with invalid credentials or unreachable servers
 
 ### Best Practices
 
@@ -536,6 +629,62 @@ echo ".env" >> .gitignore
 - Consider secrets management systems (HashiCorp Vault, AWS Secrets Manager)
 - Implement credential rotation policies
 
+## Claude Desktop Integration
+
+### Automatic Configuration
+
+The setup script automatically configures Claude Desktop. The configuration is added to:
+
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**: `%APPDATA%/Claude/claude_desktop_config.json`
+- **Linux**: `~/.config/Claude/claude_desktop_config.json`
+
+### Manual Configuration
+
+If automatic configuration fails, manually edit your Claude Desktop configuration:
+
+```json
+{
+  "mcpServers": {
+    "ndb": {
+      "command": "node",
+      "args": ["/absolute/path/to/ndb-mcp-server/dist/index.js"],
+      "env": {
+        "NDB_BASE_URL": "https://your-ndb-server.company.com",
+        "NDB_USERNAME": "your-username",
+        "NDB_PASSWORD": "your-password"
+      }
+    }
+  }
+}
+```
+
+**Important Notes:**
+- Use absolute paths for the command and args
+- Include all required environment variables
+- Restart Claude Desktop after configuration changes
+- Test with `npm run test:mcp` before expecting it to work in Claude
+
+#### Advanced Configuration
+
+**With SSL verification disabled:**
+```json
+{
+  "mcpServers": {
+    "ndb": {
+      "command": "node",
+      "args": ["/absolute/path/to/ndb-mcp-server/dist/index.js"],
+      "env": {
+        "NDB_BASE_URL": "https://your-ndb-server.company.com",
+        "NDB_TOKEN": "your-api-token",
+        "NDB_VERIFY_SSL": "false",
+        "DEBUG": "ndb:*"
+      }
+    }
+  }
+}
+```
+
 ## Testing & Validation
 
 ### Pre-Integration Testing
@@ -586,17 +735,18 @@ DEBUG=ndb:api npm run test:connection
 ✅ Server starts successfully
 ✅ Tools registered: 30+
 ✅ Sample database query works
-✅ MCP server ready for integration
+✅ Ready for Claude Desktop integration
 ```
 
 ### Validation Checklist
 
-Before proceeding to Claude Desktop integration:
+Before proceeding to usage:
 
 - [ ] **Environment**: `.env` file created and configured
 - [ ] **Connection**: `npm run test:connection` passes
 - [ ] **MCP**: `npm run test:mcp` passes
-- [ ] **Build**: `dist/index.js` exists and is current
+- [ ] **Claude**: Claude Desktop configuration updated
+- [ ] **Restart**: Claude Desktop restarted
 - [ ] **Permissions**: Service account has appropriate access
 - [ ] **Network**: Connectivity to NDB server confirmed
 
@@ -636,21 +786,6 @@ rm -f .env       # Remove partial configuration
 ./scripts/setup.sh  # Retry setup
 ```
 
-**Claude Desktop Configuration Issues**
-```bash
-# Error: Configure Claude Desktop separately
-./scripts/configure-claude.sh  # Unix/Linux/macOS
-# or
-.\scripts\configure-claude.ps1  # Windows
-```
-
-**Prerequisites Missing:**
-```bash
-# Error: .env not found or dist/index.js missing
-npm run configure       # Create .env file
-npm run build          # Build the project
-```
-
 #### Connection Issues
 ```bash
 Error: connect ECONNREFUSED
@@ -685,7 +820,11 @@ NDB_VERIFY_SSL=false
 ```
 
 #### Claude Desktop Not Finding Server
-**Note**: Claude Desktop integration is handled separately. See the [Claude Desktop Integration Guide](claude-desktop-integration.md) for configuration help.
+**Solutions:**
+- Verify absolute paths in Claude configuration
+- Check that `dist/index.js` exists (`npm run build`)
+- Restart Claude Desktop after configuration changes
+- Test MCP server independently: `npm run test:mcp`
 
 #### Permission Denied
 ```bash
@@ -725,7 +864,6 @@ If you encounter issues not covered here:
 ### Next Steps
 
 Once setup is complete:
-- 🔧 Configure Claude Desktop integration with the [Claude Desktop Integration Guide](claude-desktop-integration.md)
 - 📖 Read the [tools reference](tools-reference.md) to understand available capabilities
 - 💡 Try the [usage examples](usage-examples.md) for practical scenarios
 - 🧪 Explore advanced features in the [development guide](development.md)

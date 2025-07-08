@@ -44,25 +44,6 @@ Transform complex database operations into simple conversations: *"Create a clon
    npm run test:mcp         # Test MCP functionality
    ```
 
-### Use with Claude Desktop
-
-The setup script automatically configures Claude Desktop. If you need manual configuration, add to your Claude Desktop settings:
-
-```json
-{
-  "mcpServers": {
-    "ndb": {
-      "command": "node",
-      "args": ["/path/to/ndb-mcp-server/dist/index.js"],
-      "env": {
-        "NDB_BASE_URL": "your-ndb-url",
-        "NDB_USERNAME": "your-username"
-      }
-    }
-  }
-}
-```
-
 ## Example Conversations
 
 🗣️ **"Show me all PostgreSQL databases in production"**
@@ -101,14 +82,13 @@ The setup script automatically configures Claude Desktop. If you need manual con
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Claude        │    │   NDB MCP       │    │   Nutanix       │
-│   Desktop       │◄──►│   Server        │◄──►│   NDB           │
-│                 │    │                 │    │                 │
+│ Conversational  │◄──►│        MCP      │◄──►│       NDB       │
+│      Agent      │    │      Server     │    │                 │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
         │                        │                        │
         │                        │                        │
     MCP Protocol           NDB REST API              Database
-    (stdio/websocket)         (HTTP/HTTPS)           Operations
+ (stdio/websocket)         (HTTP/HTTPS)             Operations
 ```
 
 ### Core Components
